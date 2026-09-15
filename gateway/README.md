@@ -8,6 +8,7 @@ It exists to make `docs/LLM_TRANSPORT_RFC.md` executable before a VRChat `World/
 
 - the selected route is finite and stateless;
 - only bounded route codes are accepted;
+- unsupported languages and query parameters are rejected rather than silently widening the privacy surface;
 - the server returns `BehaviorPlan v0.1`-shaped JSON;
 - POST is rejected so the prototype does not accidentally drift into an API surface Udon does not currently expose;
 - no cookie/session/user identifier is required;
@@ -38,7 +39,7 @@ cd gateway
 python -m unittest -v test_reference_server.py
 ```
 
-The initial prototype was executed outside Unity on 2026-09-16 and all 7 reference tests passed. This is **not** evidence that UdonSharp or `VRCStringDownloader` integration works; that proof remains #18 and is blocked on the runnable #2 world.
+The stricter prototype was executed outside Unity on 2026-09-16 and all **9** reference tests passed. This is **not** evidence that UdonSharp or `VRCStringDownloader` integration works; that proof remains #18 and is blocked on the runnable #2 world.
 
 ## Production boundary
 
