@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/UyNewNas/vrc-embodied-companion/schemas/persistence-state.v1.schema.json",
+  "title": "VRC Embodied Companion Persistence State v1",
+  "description": "Abstract test/tool representation of the low-sensitivity fields persisted by the VRChat PlayerObject adapter. This is not a transcript or private-memory schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "resetEpoch",
+    "memoryEnabled",
+    "comfortStyle",
+    "touchMode",
+    "preferredDistanceM",
+    "responseVerbosity",
+    "languageCode"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "0 means no activated durable-memory record; current supported version is 1."
+    },
+    "resetEpoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "memoryEnabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "comfortStyle": {
+      "type": "integer",
+      "enum": [0, 1, 2, 3],
+      "default": 0,
+      "description": "0=unset, 1=quiet, 2=gentle_prompt, 3=talkative"
+    },
+    "touchMode": {
+      "type": "integer",
+      "enum": [0, 1, 2, 3],
+      "default": 0,
+      "description": "0=ask, 1=avoid, 2=headpat_ok, 3=close_contact_ok"
+    },
+    "preferredDistanceM": {
+      "type": "number",
+      "minimum": 0.4,
+      "maximum": 3.0,
+      "default": 1.1
+    },
+    "responseVerbosity": {
+      "type": "integer",
+      "enum": [0, 1, 2],
+      "default": 1,
+      "description": "0=brief, 1=normal, 2=verbose"
+    },
+    "languageCode": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16,
+      "pattern": "^[A-Za-z0-9-]+$",
+      "default": "auto"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "memoryEnabled": { "const": false } },
+        "required": ["memoryEnabled"]
+      },
+      "then": {
+        "properties": {
+          "comfortStyle": { "const": 0 },
+          "touchMode": { "const": 0 },
+          "preferredDistanceM": { "const": 1.1 },
+          "responseVerbosity": { "const": 1 },
+          "languageCode": { "const": "auto" }
+        }
+      }
+    }
+  ]
+}
