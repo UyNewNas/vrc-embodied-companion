@@ -12,7 +12,7 @@ SCHEMA_VERSION = "0.1"
 INTENTS = {"greet", "quiet_company", "talk_light", "walk_with_me", "offer_hug", "goodbye"}
 RELATION_BANDS = {"new", "familiar", "warm"}
 COMFORT_STYLES = {"neutral", "quiet"}
-LANGUAGE_RE = re.compile(r"^[a-z]{2,3}(?:-[A-Z]{2})?$")
+LANGUAGES = {"zh", "en"}
 PERSONA_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 
 SPEECH = {
@@ -60,7 +60,11 @@ class RouteError(ValueError):
 
 def parse_route(path: str) -> Route:
     """Parse /v1/plan/<persona>/<intent>/<relation>/<comfort>/<language>/<slot>."""
-    parts = [unquote(part) for part in urlsplit(path).path.split("/") if part]
+    parsed = urlsplit(path)
+    if parsed.query:
+        raise RouteError("query parameters are not part of transport v0.1")
+
+    parts = [unquote(part) for part in parsed.path.split("/") if part]
     if len(parts) != 8 or parts[:2] != ["v1", "plan"]:
         raise RouteError(
             "expected /v1/plan/<persona>/<intent>/<relation>/<comfort>/<language>/<slot>"
@@ -75,7 +79,7 @@ def parse_route(path: str) -> Route:
         raise RouteError("invalid relation_band")
     if comfort not in COMFORT_STYLES:
         raise RouteError("invalid comfort_style")
-    if not LANGUAGE_RE.fullmatch(language):
+    if language not in LANGUAGES:
         raise RouteError("invalid language")
 
     try:
@@ -90,16 +94,14 @@ def parse_route(path: str) -> Route:
 
 def build_plan(route: Route) -> dict:
     """Return a BehaviorPlan-v0.1-compatible deterministic reference response."""
-    base_language = route.language.split("-", 1)[0]
-    language_pack = SPEECH.get(base_language, SPEECH["en"])
-    speech = language_pack[route.intent]
+    speech = SPEECH[route.language][route.intent]
 
     if route.relation_band == "warm" and route.intent == "greet":
-        speech = ("你回来了。" if base_language == "zh" else "You're back.") + " " + speech
+        speech = ("你回来了。" if route.language == "zh" else "You're back.") + " " + speech
     if route.comfort_style == "quiet" and route.intent == "talk_light":
         speech = (
             "我们慢慢聊，不用说很多。"
-            if base_language == "zh"
+            if route.language == "zh"
             else "We can keep it slow; you don't have to say much."
         )
 
