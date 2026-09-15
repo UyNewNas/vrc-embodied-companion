@@ -312,12 +312,24 @@ namespace UyNewNas.VRCEmbodiedCompanion
                 return "auto";
             }
 
-            if (value.Length > 16)
+            int normalizedLength = value.Length > 16 ? 16 : value.Length;
+            for (int i = 0; i < normalizedLength; i++)
             {
-                return value.Substring(0, 16);
+                char c = value[i];
+                bool allowed = (c >= 'A' && c <= 'Z')
+                    || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9')
+                    || c == '-';
+
+                if (!allowed)
+                {
+                    return "auto";
+                }
             }
 
-            return value;
+            return normalizedLength == value.Length
+                ? value
+                : value.Substring(0, normalizedLength);
         }
     }
 }
