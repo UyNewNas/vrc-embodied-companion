@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/UyNewNas/vrc-embodied-companion/schemas/transport-route.v0.1.schema.json",
+  "title": "VRC Embodied Companion TransportRoute v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "persona_id",
+    "intent",
+    "relation_band",
+    "comfort_style",
+    "language",
+    "turn_slot",
+    "url"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "persona_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "intent": {
+      "type": "string",
+      "enum": [
+        "greet",
+        "quiet_company",
+        "talk_light",
+        "walk_with_me",
+        "offer_hug",
+        "goodbye"
+      ]
+    },
+    "relation_band": {
+      "type": "string",
+      "enum": ["new", "familiar", "warm"]
+    },
+    "comfort_style": {
+      "type": "string",
+      "enum": ["neutral", "quiet"]
+    },
+    "language": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
+      "maxLength": 8
+    },
+    "turn_slot": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "fallback_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    }
+  }
+}
