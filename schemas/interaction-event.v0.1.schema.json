@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/UyNewNas/vrc-embodied-companion/schemas/interaction-event.v0.1.schema.json",
+  "title": "VRC Embodied Companion InteractionEvent v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sequence", "timestamp_s", "type"],
+  "properties": {
+    "schema_version": { "const": "0.1" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "timestamp_s": { "type": "number", "minimum": 0 },
+    "player_id": { "type": "string", "minLength": 1 },
+    "type": {
+      "enum": [
+        "player_ready",
+        "player_left",
+        "persistence_restored",
+        "companion_enabled",
+        "companion_disabled",
+        "entered_contact",
+        "entered_near",
+        "entered_social",
+        "entered_far",
+        "approach_started",
+        "departure_started",
+        "facing_toward_started",
+        "facing_away_started",
+        "headpat_started",
+        "headpat_ended",
+        "intent_follow",
+        "intent_stay",
+        "intent_sit_with_me",
+        "intent_quiet_company",
+        "intent_talk",
+        "intent_offer_hug_ok",
+        "intent_stop_touch",
+        "inactivity_short",
+        "inactivity_long"
+      ]
+    },
+    "source": {
+      "enum": ["left_hand", "right_hand", "tracking", "distance", "intent", "lifecycle", "ambient", "unknown"]
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}
