@@ -17,7 +17,7 @@ VRChat's official `GetTrackingData` documentation says this is the suggested API
 
 Official references:
 
-- Player positions / `GetTrackingData`: https://creators.vrchat.com/worlds/udon/players/player-positions/
+- Player positions / `GetTrackingData` / `GetVelocity`: https://creators.vrchat.com/worlds/udon/players/player-positions/
 - Player API / `IsUserInVR`: https://creators.vrchat.com/worlds/udon/players/
 - Player collisions: https://creators.vrchat.com/worlds/udon/players/player-collisions/
 - Avatar scaling: https://creators.vrchat.com/worlds/udon/players/player-avatar-scaling/
@@ -31,7 +31,7 @@ Do not emit policy events every frame. The perception adapter samples raw state,
 Each sample reads:
 
 - local player validity;
-- local player root position;
+- local player root position and velocity;
 - local player root rotation;
 - local head `TrackingData` position + rotation;
 - local left/right hand `TrackingData` positions;
@@ -113,26 +113,32 @@ Emit only transition events:
 
 Do **not** use these states as proof that the player is listening, interested, sad, or affectionate.
 
-## 6. Relative motion classification
+## 6. Player motion classification
 
-Player world velocity alone is insufficient because the companion may also be moving. Use radial distance change as the primary signal:
+The `motion` field describes the **player's own movement relative to the companion**, not merely whether the distance between both objects changed. This distinction matters because the companion may move toward a stationary player.
+
+Use the local player's own `GetVelocity()` vector projected onto the horizontal direction from player to companion:
 
 ```text
-rawRadialSpeed = (distanceNow - distancePrevious) / dt
-filteredRadialSpeed = EMA(rawRadialSpeed, alpha = 0.35)
+towardCompanion = normalize(companionRootXZ - playerRootXZ)
+playerVelocityXZ = (velocity.x, 0, velocity.z)
+rawPlayerRadialSpeed = dot(playerVelocityXZ, towardCompanion)
+filteredPlayerRadialSpeed = EMA(rawPlayerRadialSpeed, alpha = 0.35)
 ```
+
+Positive radial speed means the **player** is moving toward the companion; negative means the player is moving away. Companion locomotion alone therefore does not create an `approaching` event for a stationary player.
 
 Classification defaults:
 
-- `approaching`: `filteredRadialSpeed <= -0.12 m/s` for 3 samples;
-- `departing`: `filteredRadialSpeed >= +0.12 m/s` for 3 samples;
-- return to neutral when `abs(filteredRadialSpeed) <= 0.06 m/s` for 3 samples;
-- if distance changes while radial speed is neutral but root velocity is meaningful, use `moving_other`;
+- `approaching`: `filteredPlayerRadialSpeed >= +0.12 m/s` for 3 samples;
+- `departing`: `filteredPlayerRadialSpeed <= -0.12 m/s` for 3 samples;
+- return to radial neutral when `abs(filteredPlayerRadialSpeed) <= 0.06 m/s` for 3 samples;
+- if horizontal player speed remains `>= 0.08 m/s` while radial speed is neutral, classify `moving_other`;
 - otherwise `still`.
 
 Emit `approach_started` / `departure_started` only when entering those stable states.
 
-If either root teleports by more than `1.0 m` between samples, reset the motion filter instead of generating a motion transition.
+If the player root or companion root jumps by more than `1.0 m` between samples, reset the direction/motion filter instead of emitting a transition. This protects against teleports and abrupt companion repositioning changing the projection axis.
 
 ## 7. Headpat detection
 
@@ -237,11 +243,11 @@ For v0.1:
 Each 10 Hz tick executes in this order:
 
 1. validate local player and lifecycle mode;
-2. read raw tracking/root/companion anchors;
+2. read raw tracking/root/velocity/companion anchors;
 3. reject teleport/discontinuity samples;
 4. update distance band;
 5. update head-facing state;
-6. update radial-motion filter;
+6. update player-motion projection/filter;
 7. update headpat detector if VR + touch sensing enabled;
 8. update inactivity timer;
 9. construct immutable `PerceptionSnapshot`;
@@ -259,7 +265,7 @@ This prevents behavior side effects from altering the raw state halfway through 
 - raw body distance;
 - current distance band;
 - raw `facingDot` + facing class;
-- raw/filtered radial speed + motion class;
+- raw/filtered **player** radial speed + motion class;
 - left/right hand distance to head anchor;
 - active headpat source;
 - headpat candidate dwell/path length;
