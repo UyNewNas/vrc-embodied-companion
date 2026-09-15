@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/UyNewNas/vrc-embodied-companion/schemas/behavior-command.v0.1.schema.json",
+  "title": "VRC Embodied Companion BehaviorCommand v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "action", "priority"],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "idle",
+        "look_at_player",
+        "look_away",
+        "approach",
+        "keep_distance",
+        "sit_near",
+        "follow",
+        "stay",
+        "react_headpat",
+        "offer_hug",
+        "wave",
+        "sleep_idle"
+      ]
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "safety",
+        "explicit_intent",
+        "interaction",
+        "normal",
+        "idle"
+      ]
+    },
+    "duration_s": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 120
+    },
+    "target_distance_m": {
+      "type": "number",
+      "minimum": 0.25,
+      "maximum": 4.0
+    },
+    "gaze": {
+      "type": "string",
+      "enum": [
+        "none",
+        "brief",
+        "soft_track",
+        "track",
+        "look_away"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 96
+    }
+  }
+}
