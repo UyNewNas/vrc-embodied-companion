@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/UyNewNas/vrc-embodied-companion/schemas/behavior-plan.v0.1.schema.json",
+  "title": "VRC Embodied Companion BehaviorPlan v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id"],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "speech": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "style": {
+      "type": "string",
+      "enum": ["neutral", "gentle", "quiet", "playful"]
+    },
+    "behavior": {
+      "$ref": "#/$defs/behavior"
+    },
+    "memory_proposals": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/memoryProposal"
+      }
+    }
+  },
+  "anyOf": [
+    { "required": ["speech"] },
+    { "required": ["behavior"] }
+  ],
+  "$defs": {
+    "behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "look_at_player",
+            "look_away",
+            "approach",
+            "keep_distance",
+            "sit_near",
+            "follow",
+            "stay",
+            "react_headpat",
+            "offer_hug",
+            "wave",
+            "sleep_idle"
+          ]
+        },
+        "duration_s": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 120
+        },
+        "target_distance_m": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 5.0
+        },
+        "gaze": {
+          "type": "string",
+          "enum": ["none", "brief", "soft_track", "track", "look_away"]
+        }
+      }
+    },
+    "memoryProposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "key", "value", "reason"],
+      "properties": {
+        "class": {
+          "type": "string",
+          "enum": ["explicit", "preference", "episode"]
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "value": {
+          "oneOf": [
+            { "type": "string", "maxLength": 256 },
+            { "type": "boolean" },
+            { "type": "number" }
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    }
+  }
+}
