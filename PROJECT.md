@@ -7,24 +7,24 @@ This file mirrors the intended GitHub Projects board until an actual board is cr
 | Item | Type | Result |
 |---|---|---|
 | Platform capability matrix (#1) | Research | Verified current VRChat constraints; unresolved product-specific behavior converted into explicit experiments |
+| Companion interaction contract (#3) | Design | Frozen v0.1 perception/events, RelationshipState, bounded actions, arbitration, offline fallback, and provider-neutral BehaviorPlan envelope |
 
 ## NOW
 
 | Item | Type | Exit condition |
 |---|---|---|
 | Minimal Unity/VRC SDK project (#2) | Engineering | World builds and passes one-client + two-client Build & Test acceptance |
-| Companion interaction contract (#3) | Design | Sensors/actions schema frozen for MVP |
 | Per-player companion prototype (#4) | Engineering | Two players each receive independent companion state |
+| Headpat / proximity / gaze (#5) | Engineering | Runtime emits stable v0.1 normalized perception/events |
+| Behavior state machine (#6) | Engineering | Deterministic v0.1 fallback policy behaves coherently without LLM |
 
 ## NEXT
 
 | Item | Type | Exit condition |
 |---|---|---|
-| Headpat / proximity / gaze (#5) | Engineering | Stable local sensing |
-| Behavior state machine (#6) | Engineering | Companion behaves coherently without LLM |
-| Persistence schema (#7) | Engineering | Preferences survive re-entry |
+| Persistence schema (#7) | Engineering | Preferences survive re-entry and reset semantics are implemented |
 | LLM gateway RFC (#8) | Research | Transport path selected and minimally reproduced |
-| Structured behavior plan (#9) | AI | Model output drives dialogue + validated animation/action requests |
+| Structured behavior plan (#9) | AI | v0.1 schema is validated at the gateway/world boundary and drives only authorized actions |
 
 ## LATER
 
