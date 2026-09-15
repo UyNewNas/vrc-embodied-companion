@@ -17,7 +17,8 @@ This file mirrors the intended GitHub Projects board until an actual board is cr
 | Per-player companion prototype (#4) | Engineering | Design is frozen in `docs/PER_PLAYER_LIFECYCLE.md`; runtime remains open until two-client evidence proves independent companion state |
 | Private/social presentation experiment (#11) | Research | Two-client evidence identifies the MVP owner-only/private presentation strategy and social-mode boundary |
 | Two-client lifecycle matrix (#12) | Test | Execute PlayerObject ownership, restore-gate, isolation, rejoin, leave, and no-cloud assertions in VRChat Build & Test |
-| Headpat / proximity / gaze (#5) | Engineering | Runtime emits stable v0.1 normalized perception/events |
+| Headpat / proximity / gaze (#5) | Engineering | Algorithm/spec and machine-readable event schemas are frozen; implement runtime and calibrate thresholds with #13 before closing |
+| Perception calibration matrix (#13) | Test | VR/Desktop/avatar-scale Build & Test evidence validates or adjusts v0.1 thresholds; blocked on #2 |
 | Behavior state machine (#6) | Engineering | Deterministic v0.1 fallback policy behaves coherently without LLM |
 
 ## NEXT
@@ -27,6 +28,7 @@ This file mirrors the intended GitHub Projects board until an actual board is cr
 | Persistence schema (#7) | Engineering | Preferences survive re-entry and reset semantics are implemented |
 | LLM gateway RFC (#8) | Research | Transport path selected and minimally reproduced |
 | Structured behavior plan (#9) | AI | v0.1 schema is validated at the gateway/world boundary and drives only authorized actions |
+| Remote/social perception regime (#14) | Research | Remote bone-derived tracking is calibrated separately or touch classification stays disabled for social mode |
 
 ## LATER
 
