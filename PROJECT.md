@@ -21,12 +21,13 @@ This file mirrors the intended GitHub Projects board until an actual board is cr
 | Perception calibration matrix (#13) | Test | VR/Desktop/avatar-scale Build & Test evidence validates or adjusts v0.1 thresholds; blocked on #2 |
 | Behavior state machine (#6) | Engineering | Deterministic policy/spec and BehaviorCommand schema are frozen; draft PR #16 contains an uncompiled controller; execute the 14 acceptance vectors after #2 |
 | Persistence schema (#7) | Engineering | Native v1 schema/privacy/reset/migration rules are frozen in `docs/PERSISTENCE_SCHEMA.md`; prove opt-in, restore, reset and future-schema safety in a runnable #2 world |
+| LLM gateway RFC (#8) | Research | MVP transport selected in `docs/LLM_TRANSPORT_RFC.md`: bounded stateless editor-time URL matrix + live/static/local fallback; keep open until #18 proves it in a real world |
+| LLM transport runtime matrix (#18) | Test | Prove serialized routes, >=6s gate, stale-response rejection, untrusted-host failure, trusted static fallback, and offline fallback; blocked on #2 |
 
 ## NEXT
 
 | Item | Type | Exit condition |
 |---|---|---|
-| LLM gateway RFC (#8) | Research | Transport path selected and minimally reproduced |
 | Structured behavior plan (#9) | AI | v0.1 schema is validated at the gateway/world boundary and drives only authorized actions |
 | Remote/social perception regime (#14) | Research | Remote bone-derived tracking is calibrated separately or touch classification stays disabled for social mode |
 
@@ -47,6 +48,9 @@ This file mirrors the intended GitHub Projects board until an actual board is cr
 - PlayerObject + `VRCEnablePersistence` is the default package-local durable carrier for v1; PlayerData remains available but is not required.
 - Durable preference memory is opt-in for a new player. Reset means overwrite-to-neutral + disable durable writes; the world API must not claim physical backend deletion it cannot perform.
 - PlayerObject ownership/state isolation does not prove private presentation; #11 remains a separate two-client experiment.
+- Current documented Udon networking does not provide a general arbitrary-text HTTP POST path. MVP live inference therefore uses **bounded stateless GET routes represented by editor-time `VRCUrl` values** rather than pretending free-form prompts can be encoded at runtime.
+- The LLM gateway receives coarse intent/context codes only; free-form transcript and intimate relationship history remain local/out of scope for transport v0.1.
+- Transport fallback order is **live gateway -> trusted static response pack -> deterministic local behavior**. A custom live host may require the player to enable Allow Untrusted URLs; the companion must still function without it.
 
 ## Decision rules
 
