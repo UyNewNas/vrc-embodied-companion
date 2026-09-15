@@ -14,7 +14,9 @@ This file mirrors the intended GitHub Projects board until an actual board is cr
 | Item | Type | Exit condition |
 |---|---|---|
 | Minimal Unity/VRC SDK project (#2) | Engineering | World builds and passes one-client + two-client Build & Test acceptance |
-| Per-player companion prototype (#4) | Engineering | Two players each receive independent companion state |
+| Per-player companion prototype (#4) | Engineering | Design is frozen in `docs/PER_PLAYER_LIFECYCLE.md`; runtime remains open until two-client evidence proves independent companion state |
+| Private/social presentation experiment (#11) | Research | Two-client evidence identifies the MVP owner-only/private presentation strategy and social-mode boundary |
+| Two-client lifecycle matrix (#12) | Test | Execute PlayerObject ownership, restore-gate, isolation, rejoin, leave, and no-cloud assertions in VRChat Build & Test |
 | Headpat / proximity / gaze (#5) | Engineering | Runtime emits stable v0.1 normalized perception/events |
 | Behavior state machine (#6) | Engineering | Deterministic v0.1 fallback policy behaves coherently without LLM |
 
