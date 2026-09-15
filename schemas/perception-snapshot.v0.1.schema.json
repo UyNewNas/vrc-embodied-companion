@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/UyNewNas/vrc-embodied-companion/schemas/perception-snapshot.v0.1.schema.json",
+  "title": "VRC Embodied Companion PerceptionSnapshot v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sequence", "timestamp_s", "player", "companion", "permissions"],
+  "properties": {
+    "schema_version": { "const": "0.1" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "timestamp_s": { "type": "number", "minimum": 0 },
+    "player_id": { "type": "string", "minLength": 1 },
+    "player": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "distance_m",
+        "distance_band",
+        "facing",
+        "motion",
+        "head_height_delta_m",
+        "left_hand_near_head",
+        "right_hand_near_head",
+        "inactivity_s"
+      ],
+      "properties": {
+        "distance_m": { "type": "number", "minimum": 0 },
+        "distance_band": { "enum": ["contact", "near", "social", "far"] },
+        "facing": { "enum": ["toward_companion", "sideways", "away", "unknown"] },
+        "motion": { "enum": ["still", "approaching", "departing", "moving_other", "unknown"] },
+        "head_height_delta_m": { "type": "number" },
+        "left_hand_near_head": { "type": "boolean" },
+        "right_hand_near_head": { "type": "boolean" },
+        "inactivity_s": { "type": "number", "minimum": 0 }
+      }
+    },
+    "companion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "locomotion", "current_action"],
+      "properties": {
+        "mode": { "enum": ["restoring", "available", "busy", "disabled"] },
+        "locomotion": { "type": "string", "minLength": 1 },
+        "current_action": { "type": "string", "minLength": 1 }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approach", "touch_response", "offer_hug"],
+      "properties": {
+        "approach": { "type": "boolean" },
+        "touch_response": { "type": "boolean" },
+        "offer_hug": { "type": "boolean" }
+      }
+    }
+  }
+}
