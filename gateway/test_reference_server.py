@@ -18,6 +18,14 @@ class RouteTests(unittest.TestCase):
         with self.assertRaises(RouteError):
             parse_route("/v1/plan/default/arbitrary_text/warm/quiet/zh/2")
 
+    def test_unknown_language_rejected(self):
+        with self.assertRaises(RouteError):
+            parse_route("/v1/plan/default/greet/new/neutral/fr/0")
+
+    def test_query_parameters_rejected(self):
+        with self.assertRaises(RouteError):
+            parse_route("/v1/plan/default/greet/new/neutral/en/0?player=secret")
+
     def test_slot_bounds(self):
         with self.assertRaises(RouteError):
             parse_route("/v1/plan/default/greet/new/neutral/en/4")
