@@ -59,24 +59,19 @@ namespace UyNewNas.VRCEmbodiedCompanion
         public void SetModeRestoring()
         {
             mode = "restoring";
-            if (currentAction == "disabled")
-            {
-                ForceTransition("idle", "idle", "none", 0f, 0f, "lifecycle_restoring", "accepted");
-            }
+            ForceTransition("idle", "idle", "none", 0f, 0f, "lifecycle_restoring", "accepted");
         }
 
         public void SetModeAvailable()
         {
             mode = "available";
-            if (currentAction == "disabled")
-            {
-                ForceTransition("idle", "idle", "none", 0f, 0f, "lifecycle_available", "accepted");
-            }
         }
 
         public void DisableCompanion()
         {
             mode = "disabled";
+            // Safety priority can remain latched while disabled because mode rejects every normal
+            // proposal. EnableCompanion explicitly releases the controller back to idle priority.
             ForceTransition("idle", "safety", "none", 0f, 0f, "companion_disabled", "accepted");
         }
 
@@ -98,7 +93,26 @@ namespace UyNewNas.VRCEmbodiedCompanion
 
             if (!navigationAvailable && IsLocomotionAction(currentAction))
             {
-                ForceTransition("stay", "safety", "none", 0f, 0f, "navigation_invalidated", "fallback_applied");
+                // Navigation failure is an interrupt, but the fallback state must not remain at
+                // safety priority forever or all later player intents would be starved.
+                ForceTransition("stay", "idle", "none", 0f, 0f, "navigation_invalidated", "fallback_applied");
+            }
+        }
+
+        public void NotifyNavigationArrived()
+        {
+            if (currentAction == "approach" || currentAction == "keep_distance")
+            {
+                string settledPriority = currentPriority == "explicit_intent" ? "explicit_intent" : "idle";
+                ForceTransition("stay", settledPriority, "none", 0f, 0f, "navigation_arrived", "accepted");
+            }
+        }
+
+        public void NotifyNavigationFailed()
+        {
+            if (IsLocomotionAction(currentAction))
+            {
+                ForceTransition("stay", "idle", "none", 0f, 0f, "navigation_failed", "fallback_applied");
             }
         }
 
@@ -107,7 +121,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             touchResponseAllowed = allowed;
             if (!allowed && (currentAction == "react_headpat" || currentAction == "offer_hug"))
             {
-                ForceTransition("idle", "safety", "none", 0f, 0f, "touch_permission_revoked", "fallback_applied");
+                ForceTransition("idle", "idle", "none", 0f, 0f, "touch_permission_revoked", "fallback_applied");
             }
         }
 
@@ -116,7 +130,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             approachAllowed = allowed;
             if (!allowed && (currentAction == "approach" || currentAction == "sit_near"))
             {
-                ForceTransition("stay", "safety", "none", 0f, 0f, "approach_permission_revoked", "fallback_applied");
+                ForceTransition("stay", "idle", "none", 0f, 0f, "approach_permission_revoked", "fallback_applied");
             }
         }
 
@@ -125,7 +139,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             offerHugAllowed = allowed;
             if (!allowed && currentAction == "offer_hug")
             {
-                ForceTransition("idle", "safety", "none", 0f, 0f, "hug_permission_revoked", "fallback_applied");
+                ForceTransition("idle", "idle", "none", 0f, 0f, "hug_permission_revoked", "fallback_applied");
             }
         }
 
@@ -134,7 +148,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             followPreference = preference;
             if (preference == "avoid" && currentAction == "follow")
             {
-                ForceTransition("stay", "safety", "none", 0f, 0f, "follow_preference_avoid", "fallback_applied");
+                ForceTransition("stay", "idle", "none", 0f, 0f, "follow_preference_avoid", "fallback_applied");
             }
         }
 
@@ -277,13 +291,16 @@ namespace UyNewNas.VRCEmbodiedCompanion
         {
             touchResponseAllowed = false;
 
-            if ((distanceBand == "contact") && navigationAvailable)
+            if (distanceBand == "contact" && navigationAvailable)
             {
-                ForceTransition("keep_distance", "safety", "none", 0f, 1.0f, "intent_stop_touch", "accepted");
+                // The interrupt itself is safety-critical, but the resulting movement is an
+                // explicit player intent. Keeping it at explicit_intent allows later explicit
+                // commands after the short movement hold instead of permanently latching safety.
+                ForceTransition("keep_distance", "explicit_intent", "none", 0f, 1.0f, "intent_stop_touch", "accepted");
                 return;
             }
 
-            ForceTransition("idle", "safety", "none", 0f, 0f, "intent_stop_touch", "accepted");
+            ForceTransition("idle", "idle", "none", 0f, 0f, "intent_stop_touch", "accepted");
         }
 
         private bool TryTransition(string action, string priority, string gaze, float durationS, float targetDistanceM, string reason)
