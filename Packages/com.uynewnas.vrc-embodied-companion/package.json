@@ -1,0 +1,9 @@
+{
+  "name": "com.uynewnas.vrc-embodied-companion",
+  "displayName": "VRC Embodied Companion",
+  "version": "0.0.1",
+  "description": "Embodied AI companion framework for VRChat worlds.",
+  "author": {
+    "name": "UyNewNas"
+  }
+}

@@ -1,0 +1,30 @@
+name: Feature
+description: Propose an implementation task
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Desired behavior
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of done
+    validations:
+      required: true
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Product principles
+      options:
+        - label: Works without deceptive human impersonation
+        - label: Does not require emotional dependency mechanics
+        - label: Has a graceful failure mode

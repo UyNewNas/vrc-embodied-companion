@@ -1,0 +1,24 @@
+name: Research
+description: Investigate an uncertain platform or architecture capability
+title: "[Research] "
+labels: ["research"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What do we need to know?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: What experiment will settle the question?
+  - type: textarea
+    id: exit
+    attributes:
+      label: Exit criterion
+      description: What result lets us make an architecture decision?
+    validations:
+      required: true
