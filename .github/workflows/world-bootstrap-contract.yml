@@ -136,3 +136,51 @@ jobs:
           Write-Host "Resolved com.vrchat.base $($basePackage.version)"
           Write-Host "Resolved com.vrchat.worlds $($worldsPackage.version)"
           Write-Host 'VPM project recognition and package resolution OK'
+      - name: Audit resolved Worlds SDK compile surface
+        shell: pwsh
+        run: |
+          $worldsRoot = Resolve-Path 'World/Packages/com.vrchat.worlds'
+          $baseRoot = Resolve-Path 'World/Packages/com.vrchat.base'
+          $sdkSources = @(
+            Get-ChildItem $worldsRoot, $baseRoot -Recurse -File -Filter '*.cs'
+          )
+          if ($sdkSources.Count -eq 0) {
+            throw 'Resolved VRChat SDK packages contain no C# sources to audit'
+          }
+
+          $descriptorTypeHits = @(
+            $sdkSources | Select-String -Pattern '\bclass\s+VRCSceneDescriptor\b'
+          )
+          if ($descriptorTypeHits.Count -eq 0) {
+            throw 'Resolved Worlds SDK no longer exposes class VRCSceneDescriptor in source'
+          }
+
+          $descriptorNamespaceHits = @(
+            $descriptorTypeHits | Where-Object {
+              $text = Get-Content $_.Path -Raw
+              $text -match '\bnamespace\s+VRC\.SDK3\.Components\b'
+            }
+          )
+          if ($descriptorNamespaceHits.Count -eq 0) {
+            throw 'Resolved VRCSceneDescriptor is not declared under VRC.SDK3.Components'
+          }
+
+          $spawnMemberHits = @(
+            $sdkSources | Select-String -Pattern '\bTransform\[\]\s+spawns\b'
+          )
+          if ($spawnMemberHits.Count -eq 0) {
+            throw 'Resolved SDK source no longer exposes Transform[] spawns used by the bootstrap'
+          }
+
+          $udonSharpHits = @(
+            Get-ChildItem $worldsRoot -Recurse -File |
+              Where-Object { $_.Name -match 'UdonSharp' }
+          )
+          if ($udonSharpHits.Count -eq 0) {
+            throw 'Resolved Worlds SDK has no UdonSharp-named files even though #2 requires UdonSharp setup'
+          }
+
+          Write-Host "VRCSceneDescriptor source: $($descriptorTypeHits[0].Path)"
+          Write-Host "spawns source: $($spawnMemberHits[0].Path)"
+          Write-Host "UdonSharp footprint: $($udonSharpHits.Count) matching files"
+          Write-Host 'Resolved Worlds SDK compile-surface audit OK'
