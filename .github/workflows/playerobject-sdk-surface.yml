@@ -30,25 +30,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\.vpm-tools\vpm.exe resolve project World
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Inspect PlayerObject component metadata
+      - name: Inspect PlayerObject component surface
         shell: pwsh
         run: |
           $probe = Join-Path $env:RUNNER_TEMP 'PlayerObjectSurfaceProbe'
+          $report = Join-Path $env:RUNNER_TEMP 'playerobject-sdk-surface.txt'
           dotnet new console --framework net8.0 --output $probe --force | Out-Null
           @'
           using System.Reflection.Metadata;
           using System.Reflection.PortableExecutable;
+          using System.Text.RegularExpressions;
 
-          string[] required =
-          {
-              "VRC.SDK3.Components.VRCPlayerObject",
-              "VRC.SDK3.Components.VRCEnablePersistence",
-          };
-
-          Dictionary<string, string?> locations = required.ToDictionary(name => name, _ => null);
+          string[] requiredSimpleNames = { "VRCPlayerObject", "VRCEnablePersistence" };
+          Dictionary<string, List<string>> candidates = requiredSimpleNames.ToDictionary(name => name, _ => new List<string>());
           int managedAssemblyCount = 0;
 
-          foreach (string root in args)
+          foreach (string root in args.Skip(1))
           {
               foreach (string path in Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories))
               {
@@ -68,11 +65,13 @@ jobs:
                           TypeDefinition type = reader.GetTypeDefinition(handle);
                           string ns = reader.GetString(type.Namespace);
                           string name = reader.GetString(type.Name);
-                          string fullName = string.IsNullOrEmpty(ns) ? name : ns + "." + name;
-                          if (locations.ContainsKey(fullName))
+                          if (!candidates.ContainsKey(name))
                           {
-                              locations[fullName] = path;
+                              continue;
                           }
+
+                          string fullName = string.IsNullOrEmpty(ns) ? name : ns + "." + name;
+                          candidates[name].Add(fullName + " | managed metadata | " + path);
                       }
                   }
                   catch (BadImageFormatException)
@@ -80,30 +79,76 @@ jobs:
                       // Native/non-managed DLL; irrelevant to the C# component API surface.
                   }
               }
+
+              foreach (string path in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+              {
+                  string text = File.ReadAllText(path);
+                  foreach (string simpleName in requiredSimpleNames)
+                  {
+                      if (!Regex.IsMatch(text, @"\b(class|struct)\s+" + Regex.Escape(simpleName) + @"\b"))
+                      {
+                          continue;
+                      }
+
+                      Match namespaceMatch = Regex.Match(text, @"\bnamespace\s+([A-Za-z_][A-Za-z0-9_.]*)");
+                      string ns = namespaceMatch.Success ? namespaceMatch.Groups[1].Value : "<global>";
+                      candidates[simpleName].Add(ns + "." + simpleName + " | C# source | " + path);
+                  }
+              }
           }
 
-          Console.WriteLine($"Managed assemblies inspected: {managedAssemblyCount}");
-          bool ok = true;
-          foreach (string name in required)
+          string reportPath = args[0];
+          using StreamWriter report = new(reportPath, false);
+          void Emit(string line)
           {
-              string? location = locations[name];
-              Console.WriteLine($"{name}: {(location ?? "MISSING")}");
-              ok &= location is not null;
+              Console.WriteLine(line);
+              report.WriteLine(line);
+          }
+
+          Emit($"Managed assemblies inspected: {managedAssemblyCount}");
+          bool ok = true;
+          foreach (string simpleName in requiredSimpleNames)
+          {
+              Emit(simpleName + " candidates:");
+              if (candidates[simpleName].Count == 0)
+              {
+                  Emit("  MISSING");
+                  ok = false;
+                  continue;
+              }
+
+              foreach (string candidate in candidates[simpleName].Distinct().OrderBy(value => value))
+              {
+                  Emit("  " + candidate);
+              }
           }
 
           if (!ok)
           {
-              Console.Error.WriteLine("Resolved SDK 3.10.5 no longer exposes the PlayerObject component surface assumed by the minimal world integration.");
+              Console.Error.WriteLine("Resolved SDK 3.10.5 does not expose all PlayerObject component types assumed by the minimal world integration.");
               return 1;
           }
 
-          Console.WriteLine("Resolved PlayerObject SDK surface OK");
+          Emit("Resolved PlayerObject SDK surface OK");
           return 0;
           '@ | Set-Content -Path (Join-Path $probe 'Program.cs') -Encoding utf8
 
           dotnet run --project $probe --configuration Release -- `
+            $report `
             'World/Packages/com.vrchat.worlds' `
             'World/Packages/com.vrchat.base'
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Resolved PlayerObject SDK surface audit failed'
+          $code = $LASTEXITCODE
+          if (Test-Path $report) {
+            Get-Content $report
           }
+          if ($code -ne 0) {
+            throw 'Resolved PlayerObject SDK surface audit failed; inspect the uploaded diagnostic artifact.'
+          }
+      - name: Upload PlayerObject surface diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playerobject-sdk-surface
+          path: ${{ runner.temp }}/playerobject-sdk-surface.txt
+          if-no-files-found: warn
+          retention-days: 7
