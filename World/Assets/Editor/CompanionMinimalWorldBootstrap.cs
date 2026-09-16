@@ -37,15 +37,13 @@ internal static class CompanionMinimalWorldBootstrap
         companion.name = "CompanionPlaceholder";
         companion.transform.position = new Vector3(0f, 1f, 1.5f);
 
-        // Issue #4 logical lifecycle integration. VRChat automatically copies a VRCPlayerObject
-        // template once per joining player. Keep visual/audio presentation out of this template for
-        // now because owner-only presentation semantics remain a separate runtime experiment (#11).
+        // Issue #4 logical lifecycle integration. Keep the lifecycle behaviour on the PlayerObject
+        // root so Networking.GetOwner(gameObject) reads the ownership anchor VRChat assigns to that
+        // PlayerObject instead of relying on ownership semantics of an unsynced child object.
+        // Visual/audio presentation remains a separate runtime experiment (#11).
         GameObject playerObjectTemplate = new GameObject("CompanionPlayerObjectTemplate");
         playerObjectTemplate.AddComponent<VRCPlayerObject>();
-
-        GameObject lifecycleObject = new GameObject("Lifecycle");
-        lifecycleObject.transform.SetParent(playerObjectTemplate.transform, false);
-        lifecycleObject.AddUdonSharpComponent<CompanionPlayerLifecycle>();
+        playerObjectTemplate.AddUdonSharpComponent<CompanionPlayerLifecycle>();
 
         GameObject runtimeServices = new GameObject("CompanionRuntime");
         runtimeServices.AddUdonSharpComponent<CompanionPlayerLookup>();
@@ -129,10 +127,9 @@ internal static class CompanionMinimalWorldBootstrap
             throw new InvalidOperationException("CompanionPlayerObjectTemplate is missing VRCPlayerObject.");
         }
 
-        CompanionPlayerLifecycle lifecycle = playerObjectTemplate.GetComponentInChildren<CompanionPlayerLifecycle>(true);
-        if (lifecycle == null)
+        if (playerObjectTemplate.GetComponent<CompanionPlayerLifecycle>() == null)
         {
-            throw new InvalidOperationException("CompanionPlayerObjectTemplate is missing its CompanionPlayerLifecycle child.");
+            throw new InvalidOperationException("CompanionPlayerObjectTemplate is missing CompanionPlayerLifecycle on the PlayerObject root.");
         }
 
         GameObject runtimeServices = GameObject.Find("CompanionRuntime");
