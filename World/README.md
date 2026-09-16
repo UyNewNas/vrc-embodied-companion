@@ -64,17 +64,34 @@ The combined verification command saves the scene, reopens it from disk, then fa
 
 ## Optional Unity batchmode smoke check
 
-Once Unity **2022.3.22f1** is installed, the same compile/bootstrap/save/reopen verification can be attempted non-interactively from a clean clone. Adjust the Unity executable path if Unity Hub is installed elsewhere:
+Once Unity **2022.3.22f1** is installed, use the checked-in Windows runner from the repository root:
 
 ```powershell
-& 'C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe' `
-  -batchmode -nographics -quit `
-  -projectPath "$PWD\World" `
-  -executeMethod CompanionMinimalWorldBootstrap.CreateSaveReopenAndVerifyMinimalWorld `
-  -logFile -
+pwsh -File .\World\Tools\Invoke-UnitySmoke.ps1
 ```
 
-Treat this path as **best-effort automation, not the authoritative #2 gate**. Unity's own 2022.3.22f1 release notes list **UUM-57742**, `Crash in CollectManagedImportDependencyGetters inside OpenScene in batch mode`, as a known issue. Because the smoke verifier intentionally calls `EditorSceneManager.OpenScene`, a batchmode crash with that signature must be recorded as an engine limitation rather than "fixed" by silently testing a different Unity version. In that case, run the same **Create, Save, Reopen and Verify** menu command in the supported interactive editor and keep the batchmode log as evidence of the known limitation.
+The runner reads the required editor version from `ProjectVersion.txt`, locates the exact Unity Hub install (or honors `UNITY_EDITOR` / `-UnityPath`), invokes `CompanionMinimalWorldBootstrap.CreateSaveReopenAndVerifyMinimalWorld`, and fails unless all of these are true:
+
+- Unity exits with code 0;
+- the bootstrap's serialized-scene success marker appears in the Unity log;
+- `Assets/Scenes/CompanionMinimal.unity` exists;
+- `ProjectSettings/EditorBuildSettings.asset` exists.
+
+It writes machine-local evidence to ignored paths:
+
+- `World/Logs/unity-smoke.log`
+- `World/Logs/unity-smoke-summary.json`
+
+The JSON summary records the exact editor path/version, timestamps, exit code, success-marker state, generated-artifact checks, and whether the log matches the known `UUM-57742` OpenScene batchmode crash signature. CI executes the same script with `-ValidateOnly`, which validates the project version and execute-method contract without pretending that a Unity editor is available on the hosted runner.
+
+To use a non-default Unity Hub location:
+
+```powershell
+pwsh -File .\World\Tools\Invoke-UnitySmoke.ps1 `
+  -UnityPath 'D:\Unity\2022.3.22f1\Editor\Unity.exe'
+```
+
+Treat batchmode as **best-effort automation, not the authoritative #2 gate**. Unity's own 2022.3.22f1 release notes list **UUM-57742**, `Crash in CollectManagedImportDependencyGetters inside OpenScene in batch mode`, as a known issue. Because the smoke verifier intentionally calls `EditorSceneManager.OpenScene`, a batchmode crash with that signature must be recorded as an engine limitation rather than "fixed" by silently testing a different Unity version. In that case, run the same **Create, Save, Reopen and Verify** menu command in the supported interactive editor and keep the batchmode log as evidence of the known limitation.
 
 Unity references for this caveat:
 
@@ -90,7 +107,7 @@ A clean Windows CI runner now recognizes this directory with the official VPM CL
 - VCC/Unity imports the resolved project without errors;
 - the editor script compiles and the combined bootstrap/verification command succeeds;
 - Unity resolves the repository-local package on Windows from a fresh clone;
-- `VRCSceneDescriptor.spawns` survives serialization/reopen (the new verifier is the minimum reproducible check for this);
+- `VRCSceneDescriptor.spawns` survives serialization/reopen (the verifier is the minimum reproducible check for this);
 - the scene passes VRChat SDK validation;
 - Build & Test launches the world;
 - the placeholder is visible and the spawn lands inside the room.
