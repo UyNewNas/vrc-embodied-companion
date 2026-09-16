@@ -68,6 +68,18 @@ namespace UyNewNas.VRCEmbodiedCompanion
                 return;
             }
 
+            // OnPlayerRestored is emitted once for every player in the instance, so unrelated restore
+            // events are expected. However, a PlayerObject owner is not transferable: once this
+            // lifecycle has bound to a player, observing a different actual owner is an invariant
+            // violation and must fail closed instead of silently rebinding the lifecycle.
+            if (associatedPlayerId >= 0 && associatedPlayerId != owner.playerId)
+            {
+                ignoredRestoreEventCount++;
+                ownerMismatchCount++;
+                MarkDetached("restore_owner_changed_unexpectedly");
+                return;
+            }
+
             if (owner.playerId != player.playerId)
             {
                 ignoredRestoreEventCount++;
@@ -78,6 +90,16 @@ namespace UyNewNas.VRCEmbodiedCompanion
 
             CacheOwner(owner);
             restoreObserved = true;
+
+            // A duplicate/replayed restore signal must not undo an explicit local disable. Disabled
+            // remains a presentation/interaction choice layered on top of a successfully restored
+            // PlayerObject, and only EnableForLocalOwner() may transition it back to ready.
+            if (lifecycleState == StateDisabled)
+            {
+                lastLifecycleAction = "restore_observed_disabled";
+                return;
+            }
+
             lifecycleState = StateReady;
             lastLifecycleAction = "ready_after_restore";
         }
