@@ -18,7 +18,9 @@ Official references:
 - https://creators.vrchat.com/worlds/creating-your-first-world/
 - https://creators.vrchat.com/releases/release-3-10-5/
 
-The VPM dependency shape mirrors VRChat's maintained `vrchat-community/template-world` (`com.vrchat.base` + `com.vrchat.worlds`, `3.x.x`). The project manifest additionally links this repository's package through a relative local UPM dependency:
+The VPM project started from VRChat's maintained world-template dependency shape (`com.vrchat.base` + `com.vrchat.worlds`). A clean Windows `vpm resolve` proved that leaving those declarations at `3.x.x` is not a stable post-resolve repository state: VPM rewrites them to the concrete selected SDK and adds a `locked` graph. This repository now commits that resolved state at **3.10.5** so a fresh preflight can be tested for idempotence instead of silently floating to a later 3.x SDK.
+
+The Unity project manifest additionally links this repository's package through a relative local UPM dependency:
 
 `file:../../Packages/com.uynewnas.vrc-embodied-companion`
 
@@ -33,12 +35,11 @@ dotnet tool install --global VRChat.VPM.CLI --version 0.1.28
 vpm install templates
 vpm check project World
 vpm resolve project World
-git restore -- World/Packages/vpm-manifest.json
 ```
 
-`vpm check project World` proves that the sparse `World/` directory is recognized as a compatible VRChat project. `vpm resolve project World` then restores the official VPM packages from `Packages/vpm-manifest.json`. CI additionally checks that `com.vrchat.base` and `com.vrchat.worlds` are materialized and that the repository-local framework dependency remains intact.
+`vpm check project World` proves that the sparse `World/` directory is recognized as a compatible VRChat project. `vpm resolve project World` restores the committed 3.10.5 package graph. CI checks that `com.vrchat.base` and `com.vrchat.worlds` materialize as 3.10.5, the repository-local framework dependency remains intact, the committed `dependencies` + `locked` graph is unchanged, and the World source tree remains clean afterwards.
 
-`World/Packages/.gitignore` mirrors VRChat's maintained world-template package policy so VPM-materialized package directories are not accidentally committed. A clean Windows run with `VRChat.VPM.CLI 0.1.28` also exposed one narrower behavior: `vpm resolve` reserializes the tracked `vpm-manifest.json` even when the parsed dependency object is unchanged. CI snapshots the declaration, compares the parsed JSON before/after, rejects any semantic dependency change, restores only a semantic-no-op reserialization, and then requires `git status -- World` to be clean. The explicit `git restore` above mirrors that normalization for the manual preflight; do not use it to hide a semantic manifest change.
+`World/Packages/.gitignore` mirrors VRChat's maintained world-template package policy so VPM-materialized package directories are not accidentally committed. If a future SDK release is intentionally adopted, update the reviewed VPM lock state in its own change rather than letting the #2 bootstrap silently float during resolution.
 
 This preflight is deliberately narrower than a Unity/VCC runtime claim: it does not compile C#, import assets, execute the scene bootstrap, run SDK validation, or launch VRChat Build & Test.
 
@@ -84,7 +85,7 @@ A successful batchmode run would still provide real Unity import/compile/bootstr
 
 ## Evidence still required before closing #2
 
-A clean Windows CI runner now recognizes this directory with the official VPM CLI and resolves the declared VRChat packages with bounded, checked normalization of VPM's semantic-no-op manifest reserialization. The branch is still **source/bootstrap evidence only** until somebody opens it in the supported Unity/VCC environment. Do not claim any of the following until actually observed:
+A clean Windows CI runner now recognizes this directory with the official VPM CLI and resolves the committed VRChat SDK graph. The branch is still **source/bootstrap evidence only** until somebody opens it in the supported Unity/VCC environment. Do not claim any of the following until actually observed:
 
 - VCC/Unity imports the resolved project without errors;
 - the editor script compiles and the combined bootstrap/verification command succeeds;
