@@ -75,6 +75,12 @@ jobs:
           assert 'RefreshOwner("player_left")' in on_left
           assert 'if (!Utilities.IsValid(player))' not in on_left
 
+          # Detached is terminal. A stale associatedPlayerId may remain for diagnostics, but it must
+          # never make MatchesPlayer return true and leak a detached PlayerObject through lookup.
+          matches_player = lifecycle.split('public bool MatchesPlayer(VRCPlayerApi player)', 1)[1]
+          matches_player = matches_player.split('public VRCPlayerApi GetAssociatedPlayer()', 1)[0]
+          assert 'if (lifecycleState == StateDetached)' in matches_player
+
           lookup_required = [
               'Networking.GetPlayerObjects(player)',
               'GetComponentInChildren<CompanionPlayerLifecycle>()',
@@ -124,7 +130,7 @@ jobs:
           # Lookup/refresh must not silently re-enable a disabled companion or resurrect a detached one.
           assert 'if (preserveDisabled)' in lifecycle
           assert 'lifecycleState = StateDisabled;' in lifecycle
-          assert lifecycle.count('if (lifecycleState == StateDetached)') >= 3
+          assert lifecycle.count('if (lifecycleState == StateDetached)') >= 4
 
           print('Player lifecycle source contract OK')
           PY
