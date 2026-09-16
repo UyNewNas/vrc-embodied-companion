@@ -45,11 +45,11 @@ if ($bootstrapText -notmatch [regex]::Escape('public static void CreateSaveReope
 }
 
 if ($ValidateOnly) {
-    Write-Host "Unity smoke runner contract OK"
+    Write-Host 'Unity smoke runner contract OK'
     Write-Host "Project: $ProjectPath"
     Write-Host "Unity: $unityVersion"
     Write-Host "Execute method: $executeMethod"
-    exit 0
+    return
 }
 
 $candidates = New-Object System.Collections.Generic.List[string]
@@ -148,16 +148,15 @@ Write-Host "Evidence summary: $SummaryPath"
 if ($passed) {
     Write-Host 'Unity import/compile/bootstrap/save/reopen smoke verification PASSED.'
     Write-Host 'This is not VRChat SDK validation or Build & Test evidence.'
-    exit 0
+    return
 }
 
 if ($knownBatchmodeOpenSceneCrash) {
-    Write-Error "Unity batchmode hit the known OpenScene crash signature associated with UUM-57742. Keep the log as engine-limit evidence and run the same Create, Save, Reopen and Verify command in interactive Unity 2022.3.22f1."
+    throw "Unity batchmode hit the known OpenScene crash signature associated with UUM-57742. Keep the log as engine-limit evidence and run the same Create, Save, Reopen and Verify command in interactive Unity 2022.3.22f1."
 }
 
 if ($exitCode -ne 0) {
-    Write-Error "Unity smoke verification failed with exit code $exitCode. Inspect $LogPath and $SummaryPath."
+    throw "Unity smoke verification failed with exit code $exitCode. Inspect $LogPath and $SummaryPath."
 }
 
-Write-Error "Unity exited successfully but the verifier evidence was incomplete (marker=$markerSeen, scene=$sceneExists, buildSettings=$buildSettingsExists). Inspect $LogPath and $SummaryPath."
-exit 2
+throw "Unity exited successfully but the verifier evidence was incomplete (marker=$markerSeen, scene=$sceneExists, buildSettings=$buildSettingsExists). Inspect $LogPath and $SummaryPath."
