@@ -6,6 +6,7 @@ on:
       - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLifecycle.cs'
       - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLookup.cs'
       - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/README.md'
+      - 'World/Assets/Editor/CompanionMinimalWorldBootstrap.cs'
       - '.github/workflows/player-lifecycle-contract.yml'
   push:
     branches:
@@ -13,6 +14,7 @@ on:
     paths:
       - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLifecycle.cs'
       - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLookup.cs'
+      - 'World/Assets/Editor/CompanionMinimalWorldBootstrap.cs'
       - '.github/workflows/player-lifecycle-contract.yml'
 
 jobs:
@@ -31,6 +33,7 @@ jobs:
           runtime = Path('Packages/com.uynewnas.vrc-embodied-companion/Runtime')
           lifecycle = (runtime / 'CompanionPlayerLifecycle.cs').read_text(encoding='utf-8')
           lookup = (runtime / 'CompanionPlayerLookup.cs').read_text(encoding='utf-8')
+          bootstrap = Path('World/Assets/Editor/CompanionMinimalWorldBootstrap.cs').read_text(encoding='utf-8')
 
           lifecycle_required = [
               'StateSpawned',
@@ -80,6 +83,22 @@ jobs:
           ]
           for token in lookup_forbidden:
               assert token not in lookup, token
+
+          # The minimal World must now serialize a real PlayerObject template and lifecycle child,
+          # instead of leaving #4 as package-only code that is never attached to a scene.
+          bootstrap_required = [
+              'using UyNewNas.VRCEmbodiedCompanion;',
+              'new GameObject("CompanionPlayerObjectTemplate")',
+              'AddComponent<VRCPlayerObject>()',
+              'AddComponent<CompanionPlayerLifecycle>()',
+              'GetComponent<VRCPlayerObject>()',
+              'GetComponentInChildren<CompanionPlayerLifecycle>(true)',
+              'new GameObject("CompanionRuntime")',
+              'AddComponent<CompanionPlayerLookup>()',
+              'GetComponent<CompanionPlayerLookup>()',
+          ]
+          for token in bootstrap_required:
+              assert token in bootstrap, token
 
           # Lookup/refresh must not silently re-enable a disabled companion or resurrect a detached one.
           assert 'if (preserveDisabled)' in lifecycle
