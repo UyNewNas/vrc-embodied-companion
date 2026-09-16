@@ -17,7 +17,7 @@ It exists to make `docs/LLM_TRANSPORT_RFC.md` executable before a VRChat `World/
 
 It deliberately uses only Python's standard library.
 
-## Run
+## Run the live reference endpoint
 
 ```bash
 cd gateway
@@ -32,18 +32,43 @@ GET http://127.0.0.1:8787/v1/plan/default/quiet_company/warm/quiet/zh/2
 
 A successful response is compatible with the current `BehaviorPlan v0.1` shape.
 
+## Generate the trusted static fallback pack
+
+The selected transport has 288 bounded routes per persona in v0.1. Do not author those URLs/responses by hand.
+
+```bash
+cd gateway
+python generate_static_pack.py --output ../dist/static-pack --persona default
+```
+
+The generator writes:
+
+```text
+dist/static-pack/
+├── route-manifest.json
+└── v1/plan/default/<intent>/<relation>/<comfort>/<language>/<slot>.json
+```
+
+`route-manifest.json` is the editor-tooling input for the future serialized `VRCUrl` route table. Each static response uses the same BehaviorPlan shape as the live reference endpoint.
+
+Static output is intentionally reproducible: unlike the live endpoint's fresh UUID, each static file receives a deterministic `static:<digest>` artifact ID. That ID is **not** a network-attempt nonce. The world must still reject stale callbacks using its own in-flight route/turn state plus `IVRCStringDownload.GetUrl()`, as required by the RFC.
+
+The generator refuses invalid persona IDs and never creates query strings, free-form player data, user identifiers, or transcript-bearing paths.
+
 ## Tests
 
 ```bash
 cd gateway
-python -m unittest -v test_reference_server.py
+python -m unittest -v test_reference_server.py test_generate_static_pack.py
 ```
 
-The stricter prototype was executed outside Unity on 2026-09-16 and all **9** reference tests passed. This is **not** evidence that UdonSharp or `VRCStringDownloader` integration works; that proof remains #18 and is blocked on the runnable #2 world.
+The stricter live reference prototype was executed outside Unity on 2026-09-16 and all **9** HTTP/contract tests passed. The static-pack generator adds **7** unit cases covering the 288-route cardinality, invalid persona rejection, bounded paths, deterministic artifact IDs, complete manifest/file emission, BehaviorPlan shape, and byte-for-byte reproducibility.
+
+These tests are **not** evidence that UdonSharp or `VRCStringDownloader` integration works; that proof remains #18 and is blocked on the runnable #2 world.
 
 ## Production boundary
 
-Do not deploy this file as-is as the public service. A production live gateway still needs:
+Do not deploy `reference_server.py` as-is as the public service. A production live gateway still needs:
 
 - TLS/HTTPS;
 - infrastructure rate limits and cost controls;
