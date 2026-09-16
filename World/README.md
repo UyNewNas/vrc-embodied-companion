@@ -37,6 +37,8 @@ vpm resolve project World
 
 `vpm check project World` proves that the sparse `World/` directory is recognized as a compatible VRChat project. `vpm resolve project World` then restores the official VPM packages from `Packages/vpm-manifest.json`. CI additionally checks that `com.vrchat.base` and `com.vrchat.worlds` are materialized and that the repository-local framework dependency remains intact.
 
+`World/Packages/.gitignore` mirrors VRChat's maintained world-template package policy so VPM-materialized package directories are not accidentally committed. The clean-Windows preflight also runs `git status -- World` after resolution and fails if resolving packages changes tracked project sources or exposes new untracked World files. A fresh clone should therefore remain source-clean after the documented VPM preflight instead of presenting the SDK payload as repository changes.
+
 This preflight is deliberately narrower than a Unity/VCC runtime claim: it does not compile C#, import assets, execute the scene bootstrap, run SDK validation, or launch VRChat Build & Test.
 
 ## First real open
@@ -60,7 +62,7 @@ The combined verification command saves the scene, reopens it from disk, then fa
 
 ## Optional Unity batchmode smoke check
 
-Once Unity **2022.3.22f1** is installed, the same compile/bootstrap/save/reopen verification can be run non-interactively from a clean clone. Adjust the Unity executable path if Unity Hub is installed elsewhere:
+Once Unity **2022.3.22f1** is installed, the same compile/bootstrap/save/reopen verification can be attempted non-interactively from a clean clone. Adjust the Unity executable path if Unity Hub is installed elsewhere:
 
 ```powershell
 & 'C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe' `
@@ -70,11 +72,18 @@ Once Unity **2022.3.22f1** is installed, the same compile/bootstrap/save/reopen 
   -logFile -
 ```
 
-A successful batchmode run would provide real Unity import/compile/bootstrap/serialization evidence. It would still **not** prove VRChat SDK validation, client launch, spawn placement in the VRChat client, or PC/Quest behavior.
+Treat this path as **best-effort automation, not the authoritative #2 gate**. Unity's own 2022.3.22f1 release notes list **UUM-57742**, `Crash in CollectManagedImportDependencyGetters inside OpenScene in batch mode`, as a known issue; Unity's issue tracker marks the defect fixed later on the 2022.3.x line, but VRChat currently still requires 2022.3.22f1. Because the smoke verifier intentionally calls `EditorSceneManager.OpenScene`, a batchmode crash with that signature must be recorded as an engine limitation rather than "fixed" by silently testing a different Unity version. In that case, run the same **Create, Save, Reopen and Verify** menu command in the supported interactive editor and keep the batchmode log as evidence of the known limitation.
+
+Unity references for this caveat:
+
+- https://unity.com/releases/editor/whats-new/2022.3.22f1
+- https://issuetracker.unity.com/issues/crash-in-collectmanagedimportdependencygetters-inside-openscene-in-batch-mode
+
+A successful batchmode run would still provide real Unity import/compile/bootstrap/serialization evidence. It would **not** prove VRChat SDK validation, client launch, spawn placement in the VRChat client, or PC/Quest behavior.
 
 ## Evidence still required before closing #2
 
-A clean Windows CI runner now recognizes this directory with the official VPM CLI and resolves the declared VRChat packages. The branch is still **source/bootstrap evidence only** until somebody opens it in the supported Unity/VCC environment. Do not claim any of the following until actually observed:
+A clean Windows CI runner now recognizes this directory with the official VPM CLI and resolves the declared VRChat packages while leaving the World source tree clean. The branch is still **source/bootstrap evidence only** until somebody opens it in the supported Unity/VCC environment. Do not claim any of the following until actually observed:
 
 - VCC/Unity imports the resolved project without errors;
 - the editor script compiles and the combined bootstrap/verification command succeeds;
