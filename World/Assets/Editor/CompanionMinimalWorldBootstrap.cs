@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using UdonSharpEditor;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -44,10 +45,10 @@ internal static class CompanionMinimalWorldBootstrap
 
         GameObject lifecycleObject = new GameObject("Lifecycle");
         lifecycleObject.transform.SetParent(playerObjectTemplate.transform, false);
-        lifecycleObject.AddComponent<CompanionPlayerLifecycle>();
+        lifecycleObject.AddUdonSharpComponent<CompanionPlayerLifecycle>();
 
         GameObject runtimeServices = new GameObject("CompanionRuntime");
-        runtimeServices.AddComponent<CompanionPlayerLookup>();
+        runtimeServices.AddUdonSharpComponent<CompanionPlayerLookup>();
 
         GameObject lightObject = new GameObject("Directional Light");
         Light light = lightObject.AddComponent<Light>();
