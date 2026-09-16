@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UyNewNas.VRCEmbodiedCompanion;
 using VRC.SDK3.Components;
 
 internal static class CompanionMinimalWorldBootstrap
@@ -34,6 +35,19 @@ internal static class CompanionMinimalWorldBootstrap
         GameObject companion = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         companion.name = "CompanionPlaceholder";
         companion.transform.position = new Vector3(0f, 1f, 1.5f);
+
+        // Issue #4 logical lifecycle integration. VRChat automatically copies a VRCPlayerObject
+        // template once per joining player. Keep visual/audio presentation out of this template for
+        // now because owner-only presentation semantics remain a separate runtime experiment (#11).
+        GameObject playerObjectTemplate = new GameObject("CompanionPlayerObjectTemplate");
+        playerObjectTemplate.AddComponent<VRCPlayerObject>();
+
+        GameObject lifecycleObject = new GameObject("Lifecycle");
+        lifecycleObject.transform.SetParent(playerObjectTemplate.transform, false);
+        lifecycleObject.AddComponent<CompanionPlayerLifecycle>();
+
+        GameObject runtimeServices = new GameObject("CompanionRuntime");
+        runtimeServices.AddComponent<CompanionPlayerLookup>();
 
         GameObject lightObject = new GameObject("Directional Light");
         Light light = lightObject.AddComponent<Light>();
@@ -103,6 +117,29 @@ internal static class CompanionMinimalWorldBootstrap
             throw new InvalidOperationException("Serialized scene is missing CompanionPlaceholder.");
         }
 
+        GameObject playerObjectTemplate = GameObject.Find("CompanionPlayerObjectTemplate");
+        if (playerObjectTemplate == null)
+        {
+            throw new InvalidOperationException("Serialized scene is missing CompanionPlayerObjectTemplate.");
+        }
+
+        if (playerObjectTemplate.GetComponent<VRCPlayerObject>() == null)
+        {
+            throw new InvalidOperationException("CompanionPlayerObjectTemplate is missing VRCPlayerObject.");
+        }
+
+        CompanionPlayerLifecycle lifecycle = playerObjectTemplate.GetComponentInChildren<CompanionPlayerLifecycle>(true);
+        if (lifecycle == null)
+        {
+            throw new InvalidOperationException("CompanionPlayerObjectTemplate is missing its CompanionPlayerLifecycle child.");
+        }
+
+        GameObject runtimeServices = GameObject.Find("CompanionRuntime");
+        if (runtimeServices == null || runtimeServices.GetComponent<CompanionPlayerLookup>() == null)
+        {
+            throw new InvalidOperationException("Serialized scene is missing CompanionRuntime with CompanionPlayerLookup.");
+        }
+
         bool buildSceneEnabled = false;
         foreach (EditorBuildSettingsScene buildScene in EditorBuildSettings.scenes)
         {
@@ -118,7 +155,7 @@ internal static class CompanionMinimalWorldBootstrap
             throw new InvalidOperationException(ScenePath + " is not enabled in EditorBuildSettings.");
         }
 
-        Debug.Log("Verified serialized minimal VRChat companion scene: descriptor, spawn, placeholder, and build-scene entry survived save/reopen. SDK validation and VRChat Build & Test are still required.");
+        Debug.Log("Verified serialized minimal VRChat companion scene: descriptor, spawn, placeholder, PlayerObject lifecycle template, lookup service, and build-scene entry survived save/reopen. SDK validation and VRChat Build & Test are still required.");
     }
 
     private static GameObject CreateBlock(Transform parent, string name, Vector3 position, Vector3 scale)
