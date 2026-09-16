@@ -30,7 +30,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\.vpm-tools\vpm.exe resolve project World
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Inspect PlayerObject component surface
+      - name: Inspect PlayerObject and UdonSharp editor surface
         shell: pwsh
         run: |
           $probe = Join-Path $env:RUNNER_TEMP 'PlayerObjectSurfaceProbe'
@@ -39,11 +39,15 @@ jobs:
           @'
           using System.Reflection.Metadata;
           using System.Reflection.PortableExecutable;
-          using System.Text.RegularExpressions;
 
-          string[] requiredSimpleNames = { "VRCPlayerObject", "VRCEnablePersistence" };
-          Dictionary<string, List<string>> candidates = requiredSimpleNames.ToDictionary(name => name, _ => new List<string>());
+          Dictionary<string, string?> requiredTypes = new()
+          {
+              ["VRC.SDK3.Components.VRCPlayerObject"] = null,
+              ["VRC.SDK3.Components.VRCEnablePersistence"] = null,
+          };
+
           int managedAssemblyCount = 0;
+          string? udonSharpEditorApi = null;
 
           foreach (string root in args.Skip(1))
           {
@@ -65,34 +69,27 @@ jobs:
                           TypeDefinition type = reader.GetTypeDefinition(handle);
                           string ns = reader.GetString(type.Namespace);
                           string name = reader.GetString(type.Name);
-                          if (!candidates.ContainsKey(name))
-                          {
-                              continue;
-                          }
-
                           string fullName = string.IsNullOrEmpty(ns) ? name : ns + "." + name;
-                          candidates[name].Add(fullName + " | managed metadata | " + path);
+                          if (requiredTypes.ContainsKey(fullName))
+                          {
+                              requiredTypes[fullName] = path;
+                          }
                       }
                   }
                   catch (BadImageFormatException)
                   {
-                      // Native/non-managed DLL; irrelevant to the C# component API surface.
+                      // Native/non-managed DLL; irrelevant to the C# API surface.
                   }
               }
 
               foreach (string path in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
               {
                   string text = File.ReadAllText(path);
-                  foreach (string simpleName in requiredSimpleNames)
+                  if (text.Contains("namespace UdonSharpEditor", StringComparison.Ordinal) &&
+                      text.Contains("class UdonSharpComponentExtensions", StringComparison.Ordinal) &&
+                      text.Contains("AddUdonSharpComponent", StringComparison.Ordinal))
                   {
-                      if (!Regex.IsMatch(text, @"\b(class|struct)\s+" + Regex.Escape(simpleName) + @"\b"))
-                      {
-                          continue;
-                      }
-
-                      Match namespaceMatch = Regex.Match(text, @"\bnamespace\s+([A-Za-z_][A-Za-z0-9_.]*)");
-                      string ns = namespaceMatch.Success ? namespaceMatch.Groups[1].Value : "<global>";
-                      candidates[simpleName].Add(ns + "." + simpleName + " | C# source | " + path);
+                      udonSharpEditorApi = path;
                   }
               }
           }
@@ -107,29 +104,22 @@ jobs:
 
           Emit($"Managed assemblies inspected: {managedAssemblyCount}");
           bool ok = true;
-          foreach (string simpleName in requiredSimpleNames)
+          foreach ((string fullName, string? location) in requiredTypes)
           {
-              Emit(simpleName + " candidates:");
-              if (candidates[simpleName].Count == 0)
-              {
-                  Emit("  MISSING");
-                  ok = false;
-                  continue;
-              }
-
-              foreach (string candidate in candidates[simpleName].Distinct().OrderBy(value => value))
-              {
-                  Emit("  " + candidate);
-              }
+              Emit($"{fullName}: {(location ?? "MISSING")}");
+              ok &= location is not null;
           }
+
+          Emit($"UdonSharpEditor.AddUdonSharpComponent source: {(udonSharpEditorApi ?? "MISSING")}");
+          ok &= udonSharpEditorApi is not null;
 
           if (!ok)
           {
-              Console.Error.WriteLine("Resolved SDK 3.10.5 does not expose all PlayerObject component types assumed by the minimal world integration.");
+              Console.Error.WriteLine("Resolved SDK 3.10.5 no longer exposes the exact PlayerObject/UdonSharp editor API surface assumed by the minimal world integration.");
               return 1;
           }
 
-          Emit("Resolved PlayerObject SDK surface OK");
+          Emit("Resolved PlayerObject/UdonSharp editor surface OK");
           return 0;
           '@ | Set-Content -Path (Join-Path $probe 'Program.cs') -Encoding utf8
 
@@ -142,7 +132,7 @@ jobs:
             Get-Content $report
           }
           if ($code -ne 0) {
-            throw 'Resolved PlayerObject SDK surface audit failed; inspect the uploaded diagnostic artifact.'
+            throw 'Resolved PlayerObject/UdonSharp editor surface audit failed; inspect the uploaded diagnostic artifact.'
           }
       - name: Upload PlayerObject surface diagnostic
         if: always()
