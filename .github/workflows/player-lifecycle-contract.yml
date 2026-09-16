@@ -86,19 +86,29 @@ jobs:
 
           # The minimal World must now serialize a real PlayerObject template and lifecycle child,
           # instead of leaving #4 as package-only code that is never attached to a scene.
+          # UdonSharp editor-created behaviours must use AddUdonSharpComponent so backing
+          # UdonBehaviour/program setup is performed; plain AddComponent is not sufficient.
           bootstrap_required = [
+              'using UdonSharpEditor;',
               'using UyNewNas.VRCEmbodiedCompanion;',
               'new GameObject("CompanionPlayerObjectTemplate")',
               'AddComponent<VRCPlayerObject>()',
-              'AddComponent<CompanionPlayerLifecycle>()',
+              'AddUdonSharpComponent<CompanionPlayerLifecycle>()',
               'GetComponent<VRCPlayerObject>()',
               'GetComponentInChildren<CompanionPlayerLifecycle>(true)',
               'new GameObject("CompanionRuntime")',
-              'AddComponent<CompanionPlayerLookup>()',
+              'AddUdonSharpComponent<CompanionPlayerLookup>()',
               'GetComponent<CompanionPlayerLookup>()',
           ]
           for token in bootstrap_required:
               assert token in bootstrap, token
+
+          bootstrap_forbidden = [
+              'AddComponent<CompanionPlayerLifecycle>()',
+              'AddComponent<CompanionPlayerLookup>()',
+          ]
+          for token in bootstrap_forbidden:
+              assert token not in bootstrap, token
 
           # Lookup/refresh must not silently re-enable a disabled companion or resurrect a detached one.
           assert 'if (preserveDisabled)' in lifecycle
