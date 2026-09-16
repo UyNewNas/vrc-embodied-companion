@@ -1,49 +1,28 @@
-using System;
 using System.IO;
-using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using VRC.SDK3.Components;
 
 internal static class CompanionMinimalWorldBootstrap
 {
     private const string ScenePath = "Assets/Scenes/CompanionMinimal.unity";
-    private const string SceneDescriptorTypeName = "VRC.SDK3.Components.VRCSceneDescriptor";
 
     [MenuItem("VRC Companion/Create or Reset Minimal Test World")]
     public static void CreateOrResetMinimalWorld()
     {
-        Type descriptorType = FindType(SceneDescriptorTypeName);
-        if (descriptorType == null)
-        {
-            throw new InvalidOperationException(
-                "VRChat Worlds SDK is not resolved. Open this project through VRChat Creator Companion, " +
-                "let VPM dependencies finish resolving, then run this command again.");
-        }
-
-        if (!typeof(Component).IsAssignableFrom(descriptorType))
-        {
-            throw new InvalidOperationException(SceneDescriptorTypeName + " is not a Unity Component.");
-        }
-
         Directory.CreateDirectory("Assets/Scenes");
         Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
         GameObject world = new GameObject("VRCWorld");
-        Component descriptor = world.AddComponent(descriptorType);
+        VRCSceneDescriptor descriptor = world.AddComponent<VRCSceneDescriptor>();
 
         GameObject spawn = new GameObject("Spawn");
         spawn.transform.SetParent(world.transform, false);
         spawn.transform.position = new Vector3(0f, 0.05f, -2.5f);
         spawn.transform.rotation = Quaternion.identity;
-
-        FieldInfo spawnsField = descriptorType.GetField("spawns", BindingFlags.Instance | BindingFlags.Public);
-        if (spawnsField == null || spawnsField.FieldType != typeof(Transform[]))
-        {
-            throw new MissingFieldException(SceneDescriptorTypeName, "spawns");
-        }
-        spawnsField.SetValue(descriptor, new[] { spawn.transform });
+        descriptor.spawns = new[] { spawn.transform };
 
         GameObject room = new GameObject("TestRoom");
         CreateBlock(room.transform, "Floor", new Vector3(0f, -0.05f, 0f), new Vector3(8f, 0.1f, 8f));
@@ -82,19 +61,5 @@ internal static class CompanionMinimalWorldBootstrap
         block.transform.position = position;
         block.transform.localScale = scale;
         return block;
-    }
-
-    private static Type FindType(string fullName)
-    {
-        Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-        for (int i = 0; i < assemblies.Length; i++)
-        {
-            Type type = assemblies[i].GetType(fullName, false);
-            if (type != null)
-            {
-                return type;
-            }
-        }
-        return null;
     }
 }
