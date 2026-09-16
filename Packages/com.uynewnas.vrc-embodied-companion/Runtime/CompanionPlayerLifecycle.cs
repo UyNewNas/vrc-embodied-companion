@@ -46,6 +46,13 @@ namespace UyNewNas.VRCEmbodiedCompanion
         {
             restoreEventCount++;
 
+            if (lifecycleState == StateDetached)
+            {
+                ignoredRestoreEventCount++;
+                lastLifecycleAction = "restore_ignored_detached";
+                return;
+            }
+
             if (!Utilities.IsValid(player))
             {
                 ignoredRestoreEventCount++;
@@ -179,11 +186,17 @@ namespace UyNewNas.VRCEmbodiedCompanion
             VRCPlayerApi owner = Networking.GetOwner(gameObject);
             if (!Utilities.IsValid(owner))
             {
+                if (associatedPlayerId >= 0 || restoreObserved)
+                {
+                    MarkDetached(reason + "_owner_invalid");
+                    return;
+                }
+
                 associatedPlayer = null;
                 associatedPlayerId = -1;
                 localOwner = false;
                 lifecycleState = StateSpawned;
-                lastLifecycleAction = reason + "_owner_unavailable";
+                lastLifecycleAction = reason + "_owner_unavailable_initially";
                 return;
             }
 
