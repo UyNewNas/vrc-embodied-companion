@@ -39,6 +39,7 @@ jobs:
               'StateDisabled',
               'StateDetached',
               'public override void OnPlayerRestored(VRCPlayerApi player)',
+              'restore_ignored_detached',
               'owner.playerId != player.playerId',
               'restore_ignored_owner_mismatch',
               'public override void OnPlayerLeft(VRCPlayerApi player)',
@@ -46,6 +47,8 @@ jobs:
               'CanMutateLocalState()',
               'IsLocalOwnerNow()',
               'owner_changed_unexpectedly',
+              'MarkDetached(reason + "_owner_invalid")',
+              '_owner_unavailable_initially',
               'preserveDisabled',
               '_owner_valid_disabled',
           ]
@@ -78,9 +81,10 @@ jobs:
           for token in lookup_forbidden:
               assert token not in lookup, token
 
-          # The lookup path must never silently re-enable a locally disabled companion.
+          # Lookup/refresh must not silently re-enable a disabled companion or resurrect a detached one.
           assert 'if (preserveDisabled)' in lifecycle
           assert 'lifecycleState = StateDisabled;' in lifecycle
+          assert lifecycle.count('if (lifecycleState == StateDetached)') >= 3
 
           print('Player lifecycle source contract OK')
           PY
