@@ -1,0 +1,58 @@
+name: World bootstrap contract
+
+on:
+  pull_request:
+    paths:
+      - 'World/**'
+      - '.github/workflows/world-bootstrap-contract.yml'
+  push:
+    branches:
+      - master
+    paths:
+      - 'World/**'
+      - '.github/workflows/world-bootstrap-contract.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate project bootstrap shape
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('World')
+          project_version = (root / 'ProjectSettings/ProjectVersion.txt').read_text(encoding='utf-8')
+          assert 'm_EditorVersion: 2022.3.22f1' in project_version
+
+          manifest = json.loads((root / 'Packages/manifest.json').read_text(encoding='utf-8'))
+          deps = manifest['dependencies']
+          assert deps['com.uynewnas.vrc-embodied-companion'] == 'file:../../Packages/com.uynewnas.vrc-embodied-companion'
+
+          vpm = json.loads((root / 'Packages/vpm-manifest.json').read_text(encoding='utf-8'))
+          vpm_deps = vpm['dependencies']
+          assert vpm_deps['com.vrchat.base']['version'] == '3.x.x'
+          assert vpm_deps['com.vrchat.worlds']['version'] == '3.x.x'
+
+          bootstrap = (root / 'Assets/Editor/CompanionMinimalWorldBootstrap.cs').read_text(encoding='utf-8')
+          required = [
+              'VRC.SDK3.Components.VRCSceneDescriptor',
+              'Assets/Scenes/CompanionMinimal.unity',
+              'CompanionPlaceholder',
+              'EditorBuildSettingsScene',
+              'MissingFieldException',
+          ]
+          for token in required:
+              assert token in bootstrap, token
+
+          readme = (root / 'README.md').read_text(encoding='utf-8')
+          assert 'Build & Test' in readme
+          assert 'source bootstrap only' in readme
+
+          print('World bootstrap source contract OK')
+          PY
