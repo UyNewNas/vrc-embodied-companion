@@ -7,8 +7,8 @@ namespace UyNewNas.VRCEmbodiedCompanion
     /// <summary>
     /// Minimal PlayerObject lifecycle anchor for issue #4.
     ///
-    /// Intended placement: one instance underneath a VRCPlayerObject template. VRChat creates a
-    /// runtime copy for every player. This component never transfers ownership and does not claim
+    /// Intended placement: on the same root GameObject as a VRCPlayerObject template. VRChat creates
+    /// a runtime copy for every player. This component never transfers ownership and does not claim
     /// presentation privacy; it only exposes logical lifecycle readiness and local-mutation gates.
     ///
     /// Runtime/two-client verification remains required by issues #2 and #12.
@@ -84,15 +84,24 @@ namespace UyNewNas.VRCEmbodiedCompanion
 
         public override void OnPlayerLeft(VRCPlayerApi player)
         {
-            if (!Utilities.IsValid(player))
+            if (lifecycleState == StateDetached)
             {
                 return;
             }
 
-            if (associatedPlayerId >= 0 && player.playerId == associatedPlayerId)
+            if (Utilities.IsValid(player)
+                && associatedPlayerId >= 0
+                && player.playerId == associatedPlayerId)
             {
                 MarkDetached("owner_left");
+                return;
             }
+
+            // VRCPlayerApi references may already be invalid by the time leave cleanup runs. Do not
+            // silently ignore that case: re-check the actual PlayerObject owner. This is a no-op for
+            // an unrelated departure while our owner remains valid, and fail-closes to detached when
+            // this PlayerObject has lost its owner or ownership changed unexpectedly.
+            RefreshOwner("player_left");
         }
 
         public bool IsReady()
