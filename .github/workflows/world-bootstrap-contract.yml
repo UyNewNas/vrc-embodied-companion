@@ -73,6 +73,7 @@ jobs:
           assert 'Optional Unity batchmode smoke check' in readme
           assert 'CreateSaveReopenAndVerifyMinimalWorld' in readme
           assert 'source/bootstrap evidence only' in readme
+          assert 'UUM-57742' in readme
           assert 'looked up at editor time' not in readme
 
           print('World bootstrap source contract OK')
@@ -100,6 +101,10 @@ jobs:
         run: |
           & .\.vpm-tools\vpm.exe check project World
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Snapshot declared VPM manifest
+        shell: pwsh
+        run: |
+          Copy-Item 'World/Packages/vpm-manifest.json' (Join-Path $env:RUNNER_TEMP 'vpm-manifest.before.json')
       - name: Resolve official VPM packages
         shell: pwsh
         run: |
@@ -145,6 +150,23 @@ jobs:
           Write-Host "Resolved com.vrchat.base $($basePackage.version)"
           Write-Host "Resolved com.vrchat.worlds $($worldsPackage.version)"
           Write-Host 'VPM project recognition and package resolution OK'
+      - name: Verify resolver manifest rewrite is semantic no-op
+        shell: pwsh
+        run: |
+          $beforePath = Join-Path $env:RUNNER_TEMP 'vpm-manifest.before.json'
+          $before = (Get-Content $beforePath -Raw | ConvertFrom-Json | ConvertTo-Json -Depth 100 -Compress)
+          $after = (Get-Content 'World/Packages/vpm-manifest.json' -Raw | ConvertFrom-Json | ConvertTo-Json -Depth 100 -Compress)
+          if ($before -ne $after) {
+            git diff -- World/Packages/vpm-manifest.json
+            throw 'VPM resolve changed vpm-manifest semantics; review the dependency mutation instead of normalizing it away.'
+          }
+
+          $status = @(git status --porcelain=v1 -- 'World/Packages/vpm-manifest.json')
+          if ($status.Count -gt 0) {
+            Write-Host 'VPM CLI reserialized vpm-manifest.json without changing dependency semantics; restoring the reviewed declaration.'
+            git diff -- World/Packages/vpm-manifest.json
+            git restore -- 'World/Packages/vpm-manifest.json'
+          }
       - name: Verify VPM resolution leaves World sources clean
         shell: pwsh
         run: |
@@ -153,7 +175,7 @@ jobs:
             $status | ForEach-Object { Write-Host $_ }
             throw 'VPM resolve changed or exposed untracked World source files; update the reproducibility contract intentionally.'
           }
-          Write-Host 'VPM resolution left World source tree clean'
+          Write-Host 'VPM resolution left World source tree clean after semantic-no-op manifest normalization'
       - name: Audit resolved SDK binary metadata
         shell: pwsh
         run: |
