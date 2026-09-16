@@ -24,6 +24,21 @@ The VPM dependency shape mirrors VRChat's maintained `vrchat-community/template-
 
 That path is relative to `World/Packages/manifest.json`, so a normal repository clone keeps the package and test project coupled without copying framework source into `Assets/`.
 
+## Headless VPM preflight
+
+The repository CI performs a Windows VPM-level preflight before anyone opens Unity. VRChat's VPM CLI needs the official templates installed in a fresh profile before package resolution, so the equivalent manual commands are:
+
+```powershell
+dotnet tool install --global VRChat.VPM.CLI --version 0.1.28
+vpm install templates
+vpm check project World
+vpm resolve project World
+```
+
+`vpm check project World` proves that the sparse `World/` directory is recognized as a compatible VRChat project. `vpm resolve project World` then restores the official VPM packages from `Packages/vpm-manifest.json`. CI additionally checks that `com.vrchat.base` and `com.vrchat.worlds` are materialized and that the repository-local framework dependency remains intact.
+
+This preflight is deliberately narrower than a Unity/VCC runtime claim: it does not compile C#, import assets, execute the scene bootstrap, run SDK validation, or launch VRChat Build & Test.
+
 ## First real open
 
 1. Add the `World/` directory as an existing Worlds project in VCC and open it with Unity **2022.3.22f1**.
@@ -45,11 +60,11 @@ The descriptor type is looked up at editor time instead of hard-coding an SDK as
 
 ## Evidence still required before closing #2
 
-This branch is **source bootstrap only** until somebody opens it in the supported Unity/VCC environment. Do not claim any of the following until actually observed:
+A clean Windows CI runner now recognizes this directory with the official VPM CLI and resolves the declared VRChat packages. The branch is still **source/bootstrap evidence only** until somebody opens it in the supported Unity/VCC environment. Do not claim any of the following until actually observed:
 
-- VCC resolves the current VRChat packages without errors;
+- VCC/Unity imports the resolved project without errors;
 - the editor script compiles and creates the scene;
-- the local package path resolves on Windows from a fresh clone;
+- Unity resolves the repository-local package on Windows from a fresh clone;
 - `VRCSceneDescriptor.spawns` survives serialization/reopen;
 - the scene passes VRChat SDK validation;
 - Build & Test launches the world;
