@@ -1,0 +1,294 @@
+name: World bootstrap contract
+
+on:
+  pull_request:
+    paths:
+      - 'World/**'
+      - '.github/workflows/world-bootstrap-contract.yml'
+  push:
+    branches:
+      - master
+    paths:
+      - 'World/**'
+      - '.github/workflows/world-bootstrap-contract.yml'
+
+jobs:
+  validate-source-shape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate project bootstrap shape
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('World')
+          project_version = (root / 'ProjectSettings/ProjectVersion.txt').read_text(encoding='utf-8')
+          assert 'm_EditorVersion: 2022.3.22f1' in project_version
+
+          manifest = json.loads((root / 'Packages/manifest.json').read_text(encoding='utf-8'))
+          deps = manifest['dependencies']
+          assert deps['com.uynewnas.vrc-embodied-companion'] == 'file:../../Packages/com.uynewnas.vrc-embodied-companion'
+          assert 'com.vrchat.clientsim' not in deps
+
+          vpm = json.loads((root / 'Packages/vpm-manifest.json').read_text(encoding='utf-8'))
+          vpm_deps = vpm['dependencies']
+          assert vpm_deps['com.vrchat.base']['version'] == '3.10.5'
+          assert vpm_deps['com.vrchat.worlds']['version'] == '3.10.5'
+          assert 'com.vrchat.clientsim' not in vpm_deps
+          locked = vpm['locked']
+          assert locked['com.vrchat.base']['version'] == '3.10.5'
+          assert locked['com.vrchat.base']['dependencies'] == {}
+          assert locked['com.vrchat.worlds']['version'] == '3.10.5'
+          assert locked['com.vrchat.worlds']['dependencies']['com.vrchat.base'] == '3.10.5'
+
+          packages_gitignore = (root / 'Packages/.gitignore').read_text(encoding='utf-8')
+          assert packages_gitignore == '/*/\n!com.vrchat.core.*/\ncom.vrchat.*/\n'
+
+          bootstrap = (root / 'Assets/Editor/CompanionMinimalWorldBootstrap.cs').read_text(encoding='utf-8')
+          required = [
+              'using VRC.SDK3.Components;',
+              'AddComponent<VRCSceneDescriptor>()',
+              'descriptor.spawns = new[] { spawn.transform };',
+              'CreateSaveReopenAndVerifyMinimalWorld',
+              'EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single)',
+              'descriptor.spawns.Length != 1',
+              'Assets/Scenes/CompanionMinimal.unity',
+              'CompanionPlaceholder',
+              'EditorBuildSettingsScene',
+          ]
+          for token in required:
+              assert token in bootstrap, token
+
+          forbidden = [
+              'System.Reflection',
+              'FindType(',
+              'GetField(',
+          ]
+          for token in forbidden:
+              assert token not in bootstrap, token
+
+          readme = (root / 'README.md').read_text(encoding='utf-8')
+          assert 'Build & Test' in readme
+          assert 'Headless VPM preflight' in readme
+          assert 'Optional Unity batchmode smoke check' in readme
+          assert 'CreateSaveReopenAndVerifyMinimalWorld' in readme
+          assert 'source/bootstrap evidence only' in readme
+          assert 'UUM-57742' in readme
+          assert 'looked up at editor time' not in readme
+
+          print('World bootstrap source contract OK')
+          PY
+
+  validate-vpm-resolution:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install supported VPM CLI baseline
+        shell: pwsh
+        run: |
+          dotnet tool install --tool-path .vpm-tools VRChat.VPM.CLI --version 0.1.28
+          & .\.vpm-tools\vpm.exe --version
+      - name: Install official VPM templates
+        shell: pwsh
+        run: |
+          & .\.vpm-tools\vpm.exe install templates
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check VRChat project recognition
+        shell: pwsh
+        run: |
+          & .\.vpm-tools\vpm.exe check project World
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Snapshot declared VPM manifest
+        shell: pwsh
+        run: |
+          Copy-Item 'World/Packages/vpm-manifest.json' (Join-Path $env:RUNNER_TEMP 'vpm-manifest.before.json')
+      - name: Resolve official VPM packages
+        shell: pwsh
+        run: |
+          $log = 'vpm-resolve.log'
+          & .\.vpm-tools\vpm.exe resolve project World *>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Write-Error "vpm resolve project failed with exit code $code; see uploaded vpm-resolution-log artifact"
+            exit $code
+          }
+      - name: Upload VPM resolver log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpm-resolution-log
+          path: vpm-resolve.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Verify resolved package handoff
+        shell: pwsh
+        run: |
+          $base = Test-Path 'World/Packages/com.vrchat.base/package.json'
+          $worlds = Test-Path 'World/Packages/com.vrchat.worlds/package.json'
+          if (-not $base) { throw 'VPM resolve did not materialize com.vrchat.base' }
+          if (-not $worlds) { throw 'VPM resolve did not materialize com.vrchat.worlds' }
+
+          $manifest = Get-Content 'World/Packages/manifest.json' -Raw | ConvertFrom-Json
+          $local = $manifest.dependencies.'com.uynewnas.vrc-embodied-companion'
+          if ($local -ne 'file:../../Packages/com.uynewnas.vrc-embodied-companion') {
+            throw "Local framework package link drifted after VPM resolve: $local"
+          }
+
+          $manifestNames = @($manifest.dependencies.PSObject.Properties.Name)
+          if ($manifestNames -contains 'com.vrchat.clientsim') {
+            throw 'VPM resolve left obsolete com.vrchat.clientsim in Packages/manifest.json'
+          }
+          if (Test-Path 'World/Packages/com.vrchat.clientsim') {
+            throw 'VPM resolve left an obsolete com.vrchat.clientsim package directory'
+          }
+
+          $basePackage = Get-Content 'World/Packages/com.vrchat.base/package.json' -Raw | ConvertFrom-Json
+          $worldsPackage = Get-Content 'World/Packages/com.vrchat.worlds/package.json' -Raw | ConvertFrom-Json
+          Write-Host "Resolved com.vrchat.base $($basePackage.version)"
+          Write-Host "Resolved com.vrchat.worlds $($worldsPackage.version)"
+          Write-Host 'VPM project recognition and package resolution OK'
+      - name: Verify resolver preserves committed lock semantics
+        shell: pwsh
+        run: |
+          $beforePath = Join-Path $env:RUNNER_TEMP 'vpm-manifest.before.json'
+          $before = (Get-Content $beforePath -Raw | ConvertFrom-Json | ConvertTo-Json -Depth 100 -Compress)
+          $after = (Get-Content 'World/Packages/vpm-manifest.json' -Raw | ConvertFrom-Json | ConvertTo-Json -Depth 100 -Compress)
+          if ($before -ne $after) {
+            git diff -- World/Packages/vpm-manifest.json
+            throw 'VPM resolve changed committed lock semantics; review the dependency mutation.'
+          }
+      - name: Verify VPM resolution leaves World sources clean
+        shell: pwsh
+        run: |
+          $status = @(git status --porcelain=v1 --untracked-files=all -- World)
+          if ($status.Count -gt 0) {
+            $status | ForEach-Object { Write-Host $_ }
+            git diff -- World
+            throw 'VPM resolve changed or exposed untracked World source files; update the reproducibility contract intentionally.'
+          }
+          Write-Host 'VPM resolution left World source tree clean'
+      - name: Audit resolved SDK binary metadata
+        shell: pwsh
+        run: |
+          $probe = Join-Path $env:RUNNER_TEMP 'VrcSdkSurfaceProbe'
+          dotnet new console --framework net8.0 --output $probe --force | Out-Null
+          @'
+          using System.Reflection.Metadata;
+          using System.Reflection.PortableExecutable;
+          using System.Text.RegularExpressions;
+
+          bool descriptorFound = false;
+          bool spawnsFound = false;
+          bool udonSharpFound = false;
+          string? descriptorLocation = null;
+          string? spawnsLocation = null;
+          string? udonSharpLocation = null;
+          int managedAssemblyCount = 0;
+
+          foreach (string root in args)
+          {
+              foreach (string path in Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories))
+              {
+                  try
+                  {
+                      using FileStream stream = File.OpenRead(path);
+                      using PEReader pe = new(stream);
+                      if (!pe.HasMetadata)
+                      {
+                          continue;
+                      }
+
+                      MetadataReader reader = pe.GetMetadataReader();
+                      managedAssemblyCount++;
+                      foreach (TypeDefinitionHandle handle in reader.TypeDefinitions)
+                      {
+                          TypeDefinition type = reader.GetTypeDefinition(handle);
+                          string ns = reader.GetString(type.Namespace);
+                          string name = reader.GetString(type.Name);
+                          string fullName = string.IsNullOrEmpty(ns) ? name : ns + "." + name;
+
+                          if (fullName == "VRC.SDK3.Components.VRCSceneDescriptor")
+                          {
+                              descriptorFound = true;
+                              descriptorLocation = path;
+                          }
+
+                          if (fullName == "UdonSharp.UdonSharpBehaviour")
+                          {
+                              udonSharpFound = true;
+                              udonSharpLocation = path + " (managed metadata)";
+                          }
+
+                          if (name.Contains("SceneDescriptor", StringComparison.Ordinal))
+                          {
+                              foreach (FieldDefinitionHandle fieldHandle in type.GetFields())
+                              {
+                                  FieldDefinition field = reader.GetFieldDefinition(fieldHandle);
+                                  if (reader.GetString(field.Name) == "spawns")
+                                  {
+                                      spawnsFound = true;
+                                      spawnsLocation = path + " :: " + fullName + ".spawns";
+                                  }
+                              }
+                          }
+                      }
+                  }
+                  catch (BadImageFormatException)
+                  {
+                      // Native or otherwise non-managed DLL; not relevant to the C# API surface.
+                  }
+              }
+          }
+
+          if (!udonSharpFound)
+          {
+              Regex udonSharpType = new(@"\bclass\s+UdonSharpBehaviour\b", RegexOptions.CultureInvariant);
+              foreach (string root in args)
+              {
+                  foreach (string path in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+                  {
+                      string text = File.ReadAllText(path);
+                      if (text.Contains("namespace UdonSharp", StringComparison.Ordinal) && udonSharpType.IsMatch(text))
+                      {
+                          udonSharpFound = true;
+                          udonSharpLocation = path + " (C# source)";
+                          break;
+                      }
+                  }
+
+                  if (udonSharpFound)
+                  {
+                      break;
+                  }
+              }
+          }
+
+          Console.WriteLine($"Managed assemblies inspected: {managedAssemblyCount}");
+          Console.WriteLine($"VRCSceneDescriptor: {(descriptorFound ? descriptorLocation : "MISSING")}");
+          Console.WriteLine($"SceneDescriptor.spawns: {(spawnsFound ? spawnsLocation : "MISSING")}");
+          Console.WriteLine($"UdonSharpBehaviour: {(udonSharpFound ? udonSharpLocation : "MISSING")}");
+
+          if (!descriptorFound || !spawnsFound || !udonSharpFound)
+          {
+              Console.Error.WriteLine("Resolved SDK surface no longer matches the bootstrap/UdonSharp assumptions.");
+              return 1;
+          }
+
+          Console.WriteLine("Resolved SDK surface contract OK");
+          return 0;
+          '@ | Set-Content -Path (Join-Path $probe 'Program.cs') -Encoding utf8
+
+          dotnet run --project $probe --configuration Release -- `
+            'World/Packages/com.vrchat.worlds' `
+            'World/Packages/com.vrchat.base'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Resolved SDK surface audit failed'
+          }
