@@ -77,8 +77,21 @@ jobs:
       - name: Resolve official VPM packages
         shell: pwsh
         run: |
-          & .\.vpm-tools\vpm.exe resolve project World
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $log = 'vpm-resolve.log'
+          & .\.vpm-tools\vpm.exe resolve project World *>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Write-Error "vpm resolve project failed with exit code $code; see uploaded vpm-resolution-log artifact"
+            exit $code
+          }
+      - name: Upload VPM resolver log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpm-resolution-log
+          path: vpm-resolve.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Verify resolved package handoff
         shell: pwsh
         run: |
