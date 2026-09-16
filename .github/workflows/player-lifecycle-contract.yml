@@ -47,7 +47,7 @@ jobs:
               'IsLocalOwnerNow()',
               'owner_changed_unexpectedly',
               'preserveDisabled',
-              'manual_refresh_owner_valid_disabled',
+              '_owner_valid_disabled',
           ]
           for token in lifecycle_required:
               assert token in lifecycle, token
