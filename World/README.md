@@ -57,12 +57,12 @@ The bootstrap command creates, deterministically:
 - one spawn transform assigned directly to `descriptor.spawns`;
 - a small floor/three-wall test room;
 - one capsule named `CompanionPlaceholder`;
-- one `CompanionPlayerObjectTemplate` carrying `VRCPlayerObject`, with a child `CompanionPlayerLifecycle` created through UdonSharp's editor API;
+- one `CompanionPlayerObjectTemplate` carrying both `VRCPlayerObject` and `CompanionPlayerLifecycle`, with the UdonSharp behaviour created through UdonSharp's editor API;
 - one scene-level `CompanionRuntime` carrying `CompanionPlayerLookup`, also created through UdonSharp's editor API;
 - one directional light;
 - one enabled build scene at `Assets/Scenes/CompanionMinimal.unity`.
 
-The PlayerObject wiring is deliberately **logical-state integration only**. VRChat's current PlayerObject contract automatically instantiates the template once per joining player and permits Udon behaviours on the template or its children. Presentation privacy remains issue #11, and persistent synced fields remain issue #7; this lifecycle prototype does not add `VRCEnablePersistence`.
+The PlayerObject wiring is deliberately **logical-state integration only**. VRChat's current PlayerObject contract automatically instantiates the template once per joining player and permits Udon behaviours on the template or its children. The lifecycle stays on the PlayerObject root so its ownership checks query the PlayerObject ownership anchor directly instead of depending on an unsynced child's ownership semantics. Presentation privacy remains issue #11, and persistent synced fields remain issue #7; this lifecycle prototype does not add `VRCEnablePersistence`.
 
 The combined verification command saves the scene, reopens it from disk, then fails closed unless the descriptor, its single `Spawn` child, the placeholder, the PlayerObject template, lifecycle component, lookup service, and enabled build-scene entry all survive serialization. This is an **Editor serialization smoke check**, not a substitute for VRChat SDK validation or Build & Test.
 
