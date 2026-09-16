@@ -47,6 +47,7 @@ jobs:
               'restore_ignored_owner_mismatch',
               'public override void OnPlayerLeft(VRCPlayerApi player)',
               'MarkDetached("owner_left")',
+              'RefreshOwner("player_left")',
               'CanMutateLocalState()',
               'IsLocalOwnerNow()',
               'owner_changed_unexpectedly',
@@ -65,6 +66,14 @@ jobs:
           ]
           for token in lifecycle_forbidden:
               assert token not in lifecycle, token
+
+          # Leave cleanup must not depend on the callback VRCPlayerApi still being valid. VRChat
+          # documents that cached player references become invalid after leave, so the fallback path
+          # must re-check the PlayerObject's actual owner instead of returning early.
+          on_left = lifecycle.split('public override void OnPlayerLeft(VRCPlayerApi player)', 1)[1]
+          on_left = on_left.split('public bool IsReady()', 1)[0]
+          assert 'RefreshOwner("player_left")' in on_left
+          assert 'if (!Utilities.IsValid(player))' not in on_left
 
           lookup_required = [
               'Networking.GetPlayerObjects(player)',
