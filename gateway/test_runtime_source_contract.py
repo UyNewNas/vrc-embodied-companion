@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -36,9 +37,9 @@ class RuntimeSourceContractTests(unittest.TestCase):
         validation = self.source.index("if (!behaviorPlanValidator.TryValidate(payload))")
         accepted = self.source.index("SignalPlanAccepted();", validation)
         self.assertGreater(accepted, validation)
-        self.assertIn(
-            'ClearInFlightState();\n            SignalPlanAccepted();',
+        self.assertRegex(
             self.source,
+            r"ClearInFlightState\(\);\s+SignalPlanAccepted\(\);",
         )
 
     def test_failure_modes_signal_unavailable_after_clearing_request(self):
@@ -49,9 +50,11 @@ class RuntimeSourceContractTests(unittest.TestCase):
             "download_error",
         ):
             with self.subTest(reason=reason):
-                self.assertIn(
-                    f'ClearInFlightState();\n            SignalPlanUnavailable("{reason}");',
+                self.assertRegex(
                     self.source,
+                    r'ClearInFlightState\(\);\s+SignalPlanUnavailable\("'
+                    + re.escape(reason)
+                    + r'"\);',
                 )
 
     def test_stale_callback_path_does_not_signal_fallback(self):
