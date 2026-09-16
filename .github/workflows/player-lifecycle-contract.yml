@@ -43,6 +43,7 @@ jobs:
               'StateDetached',
               'public override void OnPlayerRestored(VRCPlayerApi player)',
               'restore_ignored_detached',
+              'restore_owner_invalid_after_binding',
               'owner.playerId != player.playerId',
               'restore_ignored_owner_mismatch',
               'restore_owner_changed_unexpectedly',
@@ -83,6 +84,15 @@ jobs:
           assert 'if (lifecycleState == StateDisabled)' in on_restored
           assert 'restore_observed_disabled' in on_restored
           assert on_restored.index('if (lifecycleState == StateDisabled)') > on_restored.index('restoreObserved = true;')
+
+          # A missing actual owner during restore is only tolerated before this PlayerObject has ever
+          # bound. Once an associated player or completed restore exists, non-transferable ownership
+          # disappearing must terminal-detach rather than leave ready/disabled state discoverable.
+          invalid_owner = on_restored.split('if (!Utilities.IsValid(owner))', 1)[1]
+          invalid_owner = invalid_owner.split('// OnPlayerRestored is emitted', 1)[0]
+          assert 'if (associatedPlayerId >= 0 || restoreObserved)' in invalid_owner
+          assert 'MarkDetached("restore_owner_invalid_after_binding")' in invalid_owner
+          assert 'lastLifecycleAction = "restore_ignored_invalid_owner";' in invalid_owner
 
           # Leave cleanup must not depend on the callback VRCPlayerApi still being valid. VRChat
           # documents that cached player references become invalid after leave, so the fallback path
