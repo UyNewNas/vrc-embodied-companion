@@ -64,6 +64,17 @@ namespace UyNewNas.VRCEmbodiedCompanion
             if (!Utilities.IsValid(owner))
             {
                 ignoredRestoreEventCount++;
+
+                // Before the PlayerObject has ever been bound, an unavailable owner can still be a
+                // startup-order condition. After binding/restoration, however, losing the actual
+                // owner is an invariant violation for a non-transferable PlayerObject and must fail
+                // closed instead of leaving a previously ready/disabled lifecycle discoverable.
+                if (associatedPlayerId >= 0 || restoreObserved)
+                {
+                    MarkDetached("restore_owner_invalid_after_binding");
+                    return;
+                }
+
                 lastLifecycleAction = "restore_ignored_invalid_owner";
                 return;
             }
