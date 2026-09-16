@@ -4,9 +4,13 @@ import unittest
 from pathlib import Path
 
 from generate_static_pack import (
+    ROUTE_COUNT,
     build_static_plan,
     generate_pack,
     iter_routes,
+    live_relative_path,
+    route_from_index,
+    route_index,
     stable_static_request_id,
     static_relative_path,
 )
@@ -14,19 +18,46 @@ from generate_static_pack import (
 
 class StaticPackTests(unittest.TestCase):
     def test_default_matrix_has_288_routes(self):
-        self.assertEqual(288, len(list(iter_routes("default"))))
+        self.assertEqual(288, ROUTE_COUNT)
+        self.assertEqual(ROUTE_COUNT, len(list(iter_routes("default"))))
 
     def test_invalid_persona_is_rejected(self):
         with self.assertRaises(ValueError):
             list(iter_routes("../bad"))
 
-    def test_paths_are_bounded_json_paths(self):
+    def test_paths_are_bounded_and_live_static_paths_are_distinct(self):
         route = next(iter(iter_routes("default")))
-        path = static_relative_path(route).as_posix()
-        self.assertTrue(path.startswith("v1/plan/default/"))
-        self.assertTrue(path.endswith(".json"))
-        self.assertNotIn("..", path)
-        self.assertNotIn("?", path)
+        live_path = live_relative_path(route)
+        static_path = static_relative_path(route).as_posix()
+        self.assertTrue(live_path.startswith("v1/plan/default/"))
+        self.assertFalse(live_path.endswith(".json"))
+        self.assertEqual(f"{live_path}.json", static_path)
+        self.assertNotIn("..", static_path)
+        self.assertNotIn("?", static_path)
+
+    def test_route_indices_form_dense_bijection(self):
+        routes = list(iter_routes("default"))
+        indices = [route_index(route) for route in routes]
+        self.assertEqual(list(range(ROUTE_COUNT)), indices)
+        self.assertEqual(routes, [route_from_index(i, "default") for i in indices])
+
+    def test_route_index_anchor_is_stable(self):
+        matching = [
+            route
+            for route in iter_routes("default")
+            if route.intent == "quiet_company"
+            and route.relation_band == "warm"
+            and route.comfort_style == "quiet"
+            and route.language == "zh"
+            and route.turn_slot == 2
+        ]
+        self.assertEqual(1, len(matching))
+        self.assertEqual(190, route_index(matching[0]))
+
+    def test_invalid_route_indices_are_rejected(self):
+        for invalid in (-1, ROUTE_COUNT, True, 1.5):
+            with self.assertRaises(ValueError):
+                route_from_index(invalid)
 
     def test_static_request_id_is_deterministic_and_bounded(self):
         route = next(iter(iter_routes("default")))
@@ -47,6 +78,35 @@ class StaticPackTests(unittest.TestCase):
                 (root / "route-manifest.json").read_text(encoding="utf-8")
             )
             self.assertEqual(288, len(loaded["routes"]))
+
+    def test_manifest_exposes_editor_route_index_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = generate_pack(Path(tmp), "default")
+            contract = manifest["route_index_contract"]
+            self.assertEqual("0.1", manifest["route_index_version"])
+            self.assertEqual("mixed_radix_row_major", contract["layout"])
+            self.assertEqual(
+                ["intent", "relation_band", "comfort_style", "language", "turn_slot"],
+                contract["dimension_order"],
+            )
+            self.assertEqual(
+                {
+                    "intent": 48,
+                    "relation_band": 16,
+                    "comfort_style": 8,
+                    "language": 4,
+                    "turn_slot": 1,
+                },
+                contract["strides"],
+            )
+
+            first = manifest["routes"][0]
+            self.assertEqual(0, first["route_index"])
+            self.assertTrue(first["live_relative_path"].startswith("v1/plan/default/"))
+            self.assertEqual(
+                f"{first['live_relative_path']}.json",
+                first["static_relative_path"],
+            )
 
     def test_generated_plan_has_required_contract_shape(self):
         route = next(iter(iter_routes("default")))
