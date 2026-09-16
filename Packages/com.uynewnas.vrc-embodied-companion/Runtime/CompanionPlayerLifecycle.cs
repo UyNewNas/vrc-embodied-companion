@@ -175,6 +175,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
                 return;
             }
 
+            bool preserveDisabled = lifecycleState == StateDisabled && restoreObserved;
             VRCPlayerApi owner = Networking.GetOwner(gameObject);
             if (!Utilities.IsValid(owner))
             {
@@ -194,6 +195,13 @@ namespace UyNewNas.VRCEmbodiedCompanion
             }
 
             CacheOwner(owner);
+            if (preserveDisabled)
+            {
+                lifecycleState = StateDisabled;
+                lastLifecycleAction = reason + "_owner_valid_disabled";
+                return;
+            }
+
             lifecycleState = restoreObserved ? StateReady : StateRestoring;
             lastLifecycleAction = restoreObserved
                 ? reason + "_owner_valid_ready"
