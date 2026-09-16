@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - "gateway/**"
+      - "schemas/unity-route-table.v0.1.schema.json"
       - ".github/workflows/gateway-contract.yml"
   push:
     branches:
       - master
     paths:
       - "gateway/**"
+      - "schemas/unity-route-table.v0.1.schema.json"
       - ".github/workflows/gateway-contract.yml"
   workflow_dispatch:
 

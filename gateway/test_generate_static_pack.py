@@ -1,3 +1,4 @@
+import copy
 import json
 import tempfile
 import unittest
@@ -13,6 +14,10 @@ from generate_static_pack import (
     route_index,
     stable_static_request_id,
     static_relative_path,
+)
+from generate_unity_route_table import (
+    build_unity_route_table,
+    write_unity_route_table,
 )
 
 
@@ -133,6 +138,70 @@ class StaticPackTests(unittest.TestCase):
                 (left_root / static_relative_path(sample)).read_bytes(),
                 (right_root / static_relative_path(sample)).read_bytes(),
             )
+
+
+class UnityRouteTableTests(unittest.TestCase):
+    def _manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            return generate_pack(Path(tmp), "default")
+
+    def test_unity_table_is_flat_dense_and_index_aligned(self):
+        manifest = self._manifest()
+        table = build_unity_route_table(manifest)
+
+        self.assertEqual("0.1", table["schema_version"])
+        self.assertEqual("0.1", table["route_index_version"])
+        self.assertEqual(ROUTE_COUNT, table["route_count"])
+        self.assertEqual(ROUTE_COUNT, len(table["route_keys"]))
+        self.assertEqual(ROUTE_COUNT, len(table["live_relative_paths"]))
+        self.assertEqual(ROUTE_COUNT, len(table["static_relative_paths"]))
+
+        for index in (0, 1, 190, ROUTE_COUNT - 1):
+            entry = manifest["routes"][index]
+            self.assertEqual(entry["route_key"], table["route_keys"][index])
+            self.assertEqual(
+                entry["live_relative_path"], table["live_relative_paths"][index]
+            )
+            self.assertEqual(
+                entry["static_relative_path"], table["static_relative_paths"][index]
+            )
+
+    def test_unity_table_rejects_index_gap_or_reordering(self):
+        manifest = self._manifest()
+        broken = copy.deepcopy(manifest)
+        broken["routes"][10], broken["routes"][11] = broken["routes"][11], broken["routes"][10]
+        with self.assertRaises(ValueError):
+            build_unity_route_table(broken)
+
+    def test_unity_table_rejects_path_widening(self):
+        manifest = self._manifest()
+        broken = copy.deepcopy(manifest)
+        broken["routes"][0]["live_relative_path"] += "?player=secret"
+        with self.assertRaises(ValueError):
+            build_unity_route_table(broken)
+
+    def test_unity_route_table_file_is_reproducible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generate_pack(root, "default")
+            first = root / "unity-route-table-a.json"
+            second = root / "unity-route-table-b.json"
+            write_unity_route_table(root / "route-manifest.json", first)
+            write_unity_route_table(root / "route-manifest.json", second)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+
+    def test_unity_route_table_schema_is_strict_and_parseable(self):
+        schema_path = (
+            Path(__file__).resolve().parent.parent
+            / "schemas"
+            / "unity-route-table.v0.1.schema.json"
+        )
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(288, schema["properties"]["route_count"]["const"])
+        for field in ("route_keys", "live_relative_paths", "static_relative_paths"):
+            self.assertEqual(288, schema["properties"][field]["minItems"])
+            self.assertEqual(288, schema["properties"][field]["maxItems"])
 
 
 if __name__ == "__main__":

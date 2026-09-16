@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/UyNewNas/vrc-embodied-companion/schemas/unity-route-table.v0.1.schema.json",
+  "title": "VRC Embodied Companion UnityRouteTable v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "route_index_version",
+    "persona_id",
+    "route_count",
+    "route_keys",
+    "live_relative_paths",
+    "static_relative_paths"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1"
+    },
+    "route_index_version": {
+      "const": "0.1"
+    },
+    "persona_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "route_count": {
+      "const": 288
+    },
+    "route_keys": {
+      "type": "array",
+      "minItems": 288,
+      "maxItems": 288,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]{0,63}/(goodbye|greet|offer_hug|quiet_company|talk_light|walk_with_me)/(familiar|new|warm)/(neutral|quiet)/(en|zh)/[0-3]$"
+      }
+    },
+    "live_relative_paths": {
+      "type": "array",
+      "minItems": 288,
+      "maxItems": 288,
+      "items": {
+        "type": "string",
+        "pattern": "^v1/plan/[a-z][a-z0-9_-]{0,63}/(goodbye|greet|offer_hug|quiet_company|talk_light|walk_with_me)/(familiar|new|warm)/(neutral|quiet)/(en|zh)/[0-3]$"
+      }
+    },
+    "static_relative_paths": {
+      "type": "array",
+      "minItems": 288,
+      "maxItems": 288,
+      "items": {
+        "type": "string",
+        "pattern": "^v1/plan/[a-z][a-z0-9_-]{0,63}/(goodbye|greet|offer_hug|quiet_company|talk_light|walk_with_me)/(familiar|new|warm)/(neutral|quiet)/(en|zh)/[0-3]\\.json$"
+      }
+    }
+  }
+}
