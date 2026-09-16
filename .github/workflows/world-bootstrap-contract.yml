@@ -37,9 +37,14 @@ jobs:
 
           vpm = json.loads((root / 'Packages/vpm-manifest.json').read_text(encoding='utf-8'))
           vpm_deps = vpm['dependencies']
-          assert vpm_deps['com.vrchat.base']['version'] == '3.x.x'
-          assert vpm_deps['com.vrchat.worlds']['version'] == '3.x.x'
+          assert vpm_deps['com.vrchat.base']['version'] == '3.10.5'
+          assert vpm_deps['com.vrchat.worlds']['version'] == '3.10.5'
           assert 'com.vrchat.clientsim' not in vpm_deps
+          locked = vpm['locked']
+          assert locked['com.vrchat.base']['version'] == '3.10.5'
+          assert locked['com.vrchat.base']['dependencies'] == {}
+          assert locked['com.vrchat.worlds']['version'] == '3.10.5'
+          assert locked['com.vrchat.worlds']['dependencies']['com.vrchat.base'] == '3.10.5'
 
           packages_gitignore = (root / 'Packages/.gitignore').read_text(encoding='utf-8')
           assert packages_gitignore == '/*/\n!com.vrchat.core.*/\ncom.vrchat.*/\n'
@@ -150,7 +155,7 @@ jobs:
           Write-Host "Resolved com.vrchat.base $($basePackage.version)"
           Write-Host "Resolved com.vrchat.worlds $($worldsPackage.version)"
           Write-Host 'VPM project recognition and package resolution OK'
-      - name: Verify resolver manifest rewrite is semantic no-op
+      - name: Verify resolver preserves committed lock semantics
         shell: pwsh
         run: |
           $beforePath = Join-Path $env:RUNNER_TEMP 'vpm-manifest.before.json'
@@ -158,14 +163,7 @@ jobs:
           $after = (Get-Content 'World/Packages/vpm-manifest.json' -Raw | ConvertFrom-Json | ConvertTo-Json -Depth 100 -Compress)
           if ($before -ne $after) {
             git diff -- World/Packages/vpm-manifest.json
-            throw 'VPM resolve changed vpm-manifest semantics; review the dependency mutation instead of normalizing it away.'
-          }
-
-          $status = @(git status --porcelain=v1 -- 'World/Packages/vpm-manifest.json')
-          if ($status.Count -gt 0) {
-            Write-Host 'VPM CLI reserialized vpm-manifest.json without changing dependency semantics; restoring the reviewed declaration.'
-            git diff -- World/Packages/vpm-manifest.json
-            git restore -- 'World/Packages/vpm-manifest.json'
+            throw 'VPM resolve changed committed lock semantics; review the dependency mutation.'
           }
       - name: Verify VPM resolution leaves World sources clean
         shell: pwsh
@@ -173,9 +171,10 @@ jobs:
           $status = @(git status --porcelain=v1 --untracked-files=all -- World)
           if ($status.Count -gt 0) {
             $status | ForEach-Object { Write-Host $_ }
+            git diff -- World
             throw 'VPM resolve changed or exposed untracked World source files; update the reproducibility contract intentionally.'
           }
-          Write-Host 'VPM resolution left World source tree clean after semantic-no-op manifest normalization'
+          Write-Host 'VPM resolution left World source tree clean'
       - name: Audit resolved SDK binary metadata
         shell: pwsh
         run: |
