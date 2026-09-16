@@ -144,6 +144,7 @@ jobs:
           @'
           using System.Reflection.Metadata;
           using System.Reflection.PortableExecutable;
+          using System.Text.RegularExpressions;
 
           bool descriptorFound = false;
           bool spawnsFound = false;
@@ -184,7 +185,7 @@ jobs:
                           if (fullName == "UdonSharp.UdonSharpBehaviour")
                           {
                               udonSharpFound = true;
-                              udonSharpLocation = path;
+                              udonSharpLocation = path + " (managed metadata)";
                           }
 
                           if (name.Contains("SceneDescriptor", StringComparison.Ordinal))
@@ -208,6 +209,29 @@ jobs:
               }
           }
 
+          if (!udonSharpFound)
+          {
+              Regex udonSharpType = new(@"\bclass\s+UdonSharpBehaviour\b", RegexOptions.CultureInvariant);
+              foreach (string root in args)
+              {
+                  foreach (string path in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+                  {
+                      string text = File.ReadAllText(path);
+                      if (text.Contains("namespace UdonSharp", StringComparison.Ordinal) && udonSharpType.IsMatch(text))
+                      {
+                          udonSharpFound = true;
+                          udonSharpLocation = path + " (C# source)";
+                          break;
+                      }
+                  }
+
+                  if (udonSharpFound)
+                  {
+                      break;
+                  }
+              }
+          }
+
           Console.WriteLine($"Managed assemblies inspected: {managedAssemblyCount}");
           Console.WriteLine($"VRCSceneDescriptor: {(descriptorFound ? descriptorLocation : "MISSING")}");
           Console.WriteLine($"SceneDescriptor.spawns: {(spawnsFound ? spawnsLocation : "MISSING")}");
@@ -215,11 +239,11 @@ jobs:
 
           if (!descriptorFound || !spawnsFound || !udonSharpFound)
           {
-              Console.Error.WriteLine("Resolved SDK binary metadata no longer matches the bootstrap/UdonSharp assumptions.");
+              Console.Error.WriteLine("Resolved SDK surface no longer matches the bootstrap/UdonSharp assumptions.");
               return 1;
           }
 
-          Console.WriteLine("Resolved SDK binary metadata contract OK");
+          Console.WriteLine("Resolved SDK surface contract OK");
           return 0;
           '@ | Set-Content -Path (Join-Path $probe 'Program.cs') -Encoding utf8
 
@@ -227,5 +251,5 @@ jobs:
             'World/Packages/com.vrchat.worlds' `
             'World/Packages/com.vrchat.base'
           if ($LASTEXITCODE -ne 0) {
-            throw 'Resolved SDK binary metadata audit failed'
+            throw 'Resolved SDK surface audit failed'
           }
