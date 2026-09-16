@@ -33,11 +33,13 @@ jobs:
           manifest = json.loads((root / 'Packages/manifest.json').read_text(encoding='utf-8'))
           deps = manifest['dependencies']
           assert deps['com.uynewnas.vrc-embodied-companion'] == 'file:../../Packages/com.uynewnas.vrc-embodied-companion'
+          assert 'com.vrchat.clientsim' not in deps
 
           vpm = json.loads((root / 'Packages/vpm-manifest.json').read_text(encoding='utf-8'))
           vpm_deps = vpm['dependencies']
           assert vpm_deps['com.vrchat.base']['version'] == '3.x.x'
           assert vpm_deps['com.vrchat.worlds']['version'] == '3.x.x'
+          assert 'com.vrchat.clientsim' not in vpm_deps
 
           bootstrap = (root / 'Assets/Editor/CompanionMinimalWorldBootstrap.cs').read_text(encoding='utf-8')
           required = [
@@ -119,6 +121,14 @@ jobs:
           $local = $manifest.dependencies.'com.uynewnas.vrc-embodied-companion'
           if ($local -ne 'file:../../Packages/com.uynewnas.vrc-embodied-companion') {
             throw "Local framework package link drifted after VPM resolve: $local"
+          }
+
+          $manifestNames = @($manifest.dependencies.PSObject.Properties.Name)
+          if ($manifestNames -contains 'com.vrchat.clientsim') {
+            throw 'VPM resolve left obsolete com.vrchat.clientsim in Packages/manifest.json'
+          }
+          if (Test-Path 'World/Packages/com.vrchat.clientsim') {
+            throw 'VPM resolve left an obsolete com.vrchat.clientsim package directory'
           }
 
           $basePackage = Get-Content 'World/Packages/com.vrchat.base/package.json' -Raw | ConvertFrom-Json
