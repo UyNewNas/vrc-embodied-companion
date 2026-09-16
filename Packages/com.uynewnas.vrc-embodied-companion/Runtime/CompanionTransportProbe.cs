@@ -10,9 +10,10 @@ namespace UyNewNas.VRCEmbodiedCompanion
     ///
     /// It proves the request discipline required by issue #18 once a runnable world
     /// exists: one request in flight, a conservative >=6 second start cadence, timeout
-    /// recovery, callback URL matching, and fail-closed BehaviorPlan validation.
+    /// recovery, callback URL matching, fail-closed BehaviorPlan validation, and a
+    /// narrow event-only handoff to the later behavior authorization layer.
     ///
-    /// It intentionally stops before fallback selection or behavior execution.
+    /// It does not execute model-proposed world actions itself.
     /// Unity/UdonSharp compilation and VRChat runtime behavior remain unverified until
     /// issue #2 provides a runnable VCC World project.
     /// </summary>
@@ -20,12 +21,18 @@ namespace UyNewNas.VRCEmbodiedCompanion
     {
         private const int ExpectedRouteCount = 288;
         private const float PlatformCadenceFloorSeconds = 6f;
+        private const string AcceptedPlanEventName = "OnCompanionBehaviorPlanAccepted";
+        private const string UnavailablePlanEventName = "OnCompanionBehaviorPlanUnavailable";
 
         [Header("Route table")]
         public CompanionTransportRouteBinding routeBinding;
 
         [Header("Response validation")]
         public CompanionBehaviorPlanValidator behaviorPlanValidator;
+
+        [Header("Plan handoff")]
+        [Tooltip("Optional UdonSharp target. It receives fixed local custom events only; it must pull validated fields from behaviorPlanValidator and route behavior through the #6 authorization controller.")]
+        public UdonSharpBehaviour planHandoffTarget;
 
         [Header("Request discipline")]
         [Tooltip("Clamped to at least 6 seconds to stay above VRChat's documented 5 second string-download limit.")]
@@ -46,6 +53,8 @@ namespace UyNewNas.VRCEmbodiedCompanion
         public int rejectedStartCount;
         public int validPlanCount;
         public int rejectedPlanCount;
+        public int acceptedPlanSignalCount;
+        public int unavailablePlanSignalCount;
         public int lastAcceptedRouteIndex = -1;
         public bool lastAcceptedUsedStaticRoute;
         public string lastAcceptedUrl = "";
@@ -54,6 +63,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
         public string lastError = "";
         public string lastRejectedReason = "";
         public string lastPlanRejectReason = "";
+        public string lastUnavailableReason = "";
         public string lastIgnoredCallbackUrl = "";
 
         private float inFlightStartedAt;
@@ -85,6 +95,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             lastErrorCode = 0;
             lastError = "timeout";
             ClearInFlightState();
+            SignalPlanUnavailable("timeout");
         }
 
         private bool TryStartRequest(int routeIndex, bool useStaticRoute)
@@ -131,6 +142,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             nextAllowedRequestAt = now + Mathf.Max(PlatformCadenceFloorSeconds, minimumRequestIntervalSeconds);
             lastRejectedReason = "";
             lastPlanRejectReason = "";
+            lastUnavailableReason = "";
             lastErrorCode = 0;
             lastError = "";
 
@@ -161,6 +173,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
                 lastPlanRejectReason = "validator_missing";
                 lastError = "behavior_plan_invalid";
                 ClearInFlightState();
+                SignalPlanUnavailable("validator_missing");
                 return;
             }
 
@@ -171,6 +184,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
                 lastPlanRejectReason = behaviorPlanValidator.lastRejectReason;
                 lastError = "behavior_plan_invalid";
                 ClearInFlightState();
+                SignalPlanUnavailable("behavior_plan_invalid");
                 return;
             }
 
@@ -179,6 +193,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             lastPlanRejectReason = "";
             lastError = "";
             ClearInFlightState();
+            SignalPlanAccepted();
         }
 
         public override void OnStringLoadError(IVRCStringDownload result)
@@ -199,6 +214,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             lastErrorCode = result.ErrorCode;
             lastError = result.Error;
             ClearInFlightState();
+            SignalPlanUnavailable("download_error");
         }
 
         private bool BindingIsReady()
@@ -258,6 +274,28 @@ namespace UyNewNas.VRCEmbodiedCompanion
             rejectedStartCount++;
             lastRejectedReason = reason;
             return false;
+        }
+
+        private void SignalPlanAccepted()
+        {
+            acceptedPlanSignalCount++;
+            lastUnavailableReason = "";
+
+            if (planHandoffTarget != null)
+            {
+                planHandoffTarget.SendCustomEvent(AcceptedPlanEventName);
+            }
+        }
+
+        private void SignalPlanUnavailable(string reason)
+        {
+            unavailablePlanSignalCount++;
+            lastUnavailableReason = reason;
+
+            if (planHandoffTarget != null)
+            {
+                planHandoffTarget.SendCustomEvent(UnavailablePlanEventName);
+            }
         }
 
         private void ClearInFlightState()
