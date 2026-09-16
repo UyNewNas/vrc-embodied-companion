@@ -69,6 +69,11 @@ jobs:
         run: |
           dotnet tool install --tool-path .vpm-tools VRChat.VPM.CLI --version 0.1.28
           & .\.vpm-tools\vpm.exe --version
+      - name: Install official VPM templates
+        shell: pwsh
+        run: |
+          & .\.vpm-tools\vpm.exe install templates
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Check VRChat project recognition
         shell: pwsh
         run: |
