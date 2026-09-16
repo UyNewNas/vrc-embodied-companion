@@ -84,8 +84,9 @@ jobs:
           for token in lookup_forbidden:
               assert token not in lookup, token
 
-          # The minimal World must now serialize a real PlayerObject template and lifecycle child,
-          # instead of leaving #4 as package-only code that is never attached to a scene.
+          # The minimal World must now serialize a real PlayerObject template with its lifecycle
+          # behaviour on the PlayerObject root. That keeps Networking.GetOwner(gameObject) anchored
+          # to the object whose ownership VRChat assigns per player instead of an unsynced child.
           # UdonSharp editor-created behaviours must use AddUdonSharpComponent so backing
           # UdonBehaviour/program setup is performed; plain AddComponent is not sufficient.
           bootstrap_required = [
@@ -93,9 +94,9 @@ jobs:
               'using UyNewNas.VRCEmbodiedCompanion;',
               'new GameObject("CompanionPlayerObjectTemplate")',
               'AddComponent<VRCPlayerObject>()',
-              'AddUdonSharpComponent<CompanionPlayerLifecycle>()',
+              'playerObjectTemplate.AddUdonSharpComponent<CompanionPlayerLifecycle>()',
               'GetComponent<VRCPlayerObject>()',
-              'GetComponentInChildren<CompanionPlayerLifecycle>(true)',
+              'playerObjectTemplate.GetComponent<CompanionPlayerLifecycle>()',
               'new GameObject("CompanionRuntime")',
               'AddUdonSharpComponent<CompanionPlayerLookup>()',
               'GetComponent<CompanionPlayerLookup>()',
@@ -106,6 +107,7 @@ jobs:
           bootstrap_forbidden = [
               'AddComponent<CompanionPlayerLifecycle>()',
               'AddComponent<CompanionPlayerLookup>()',
+              'new GameObject("Lifecycle")',
           ]
           for token in bootstrap_forbidden:
               assert token not in bootstrap, token
