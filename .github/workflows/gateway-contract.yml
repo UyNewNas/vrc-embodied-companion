@@ -29,4 +29,4 @@ jobs:
           python-version: "3.11"
       - name: Run transport contract tests
         working-directory: gateway
-        run: python -m unittest -v test_reference_server.py test_generate_static_pack.py
+        run: python -m unittest -v test_reference_server.py test_generate_static_pack.py test_behavior_plan_contract.py
