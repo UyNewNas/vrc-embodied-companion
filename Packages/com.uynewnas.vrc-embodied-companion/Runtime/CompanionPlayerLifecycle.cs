@@ -131,6 +131,11 @@ namespace UyNewNas.VRCEmbodiedCompanion
 
         public bool MatchesPlayer(VRCPlayerApi player)
         {
+            if (lifecycleState == StateDetached)
+            {
+                return false;
+            }
+
             if (!Utilities.IsValid(player) || associatedPlayerId < 0)
             {
                 return false;
