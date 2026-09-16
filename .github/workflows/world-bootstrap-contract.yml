@@ -72,6 +72,18 @@ jobs:
           for token in forbidden:
               assert token not in bootstrap, token
 
+          smoke_runner = (root / 'Tools/Invoke-UnitySmoke.ps1').read_text(encoding='utf-8')
+          smoke_required = [
+              "'2022.3.22f1'",
+              'CompanionMinimalWorldBootstrap.CreateSaveReopenAndVerifyMinimalWorld',
+              "'-batchmode'",
+              "'world-unity-smoke.v0.1'",
+              'known_uum_57742_signature',
+              'success_marker_seen',
+          ]
+          for token in smoke_required:
+              assert token in smoke_runner, token
+
           readme = (root / 'README.md').read_text(encoding='utf-8')
           assert 'Build & Test' in readme
           assert 'Headless VPM preflight' in readme
@@ -175,6 +187,10 @@ jobs:
             throw 'VPM resolve changed or exposed untracked World source files; update the reproducibility contract intentionally.'
           }
           Write-Host 'VPM resolution left World source tree clean'
+      - name: Validate Unity smoke runner contract
+        shell: pwsh
+        run: |
+          & .\World\Tools\Invoke-UnitySmoke.ps1 -ValidateOnly
       - name: Audit resolved SDK binary metadata
         shell: pwsh
         run: |
