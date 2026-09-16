@@ -1,0 +1,86 @@
+name: Player lifecycle contract
+
+on:
+  pull_request:
+    paths:
+      - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLifecycle.cs'
+      - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLookup.cs'
+      - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/README.md'
+      - '.github/workflows/player-lifecycle-contract.yml'
+  push:
+    branches:
+      - master
+    paths:
+      - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLifecycle.cs'
+      - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLookup.cs'
+      - '.github/workflows/player-lifecycle-contract.yml'
+
+jobs:
+  validate-source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate PlayerObject lifecycle invariants
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          runtime = Path('Packages/com.uynewnas.vrc-embodied-companion/Runtime')
+          lifecycle = (runtime / 'CompanionPlayerLifecycle.cs').read_text(encoding='utf-8')
+          lookup = (runtime / 'CompanionPlayerLookup.cs').read_text(encoding='utf-8')
+
+          lifecycle_required = [
+              'StateSpawned',
+              'StateRestoring',
+              'StateReady',
+              'StateDisabled',
+              'StateDetached',
+              'public override void OnPlayerRestored(VRCPlayerApi player)',
+              'owner.playerId != player.playerId',
+              'restore_ignored_owner_mismatch',
+              'public override void OnPlayerLeft(VRCPlayerApi player)',
+              'MarkDetached("owner_left")',
+              'CanMutateLocalState()',
+              'IsLocalOwnerNow()',
+              'owner_changed_unexpectedly',
+              'preserveDisabled',
+              'manual_refresh_owner_valid_disabled',
+          ]
+          for token in lifecycle_required:
+              assert token in lifecycle, token
+
+          lifecycle_forbidden = [
+              'Networking.SetOwner',
+              '[UdonSynced]',
+              'RequestSerialization()',
+          ]
+          for token in lifecycle_forbidden:
+              assert token not in lifecycle, token
+
+          lookup_required = [
+              'Networking.GetPlayerObjects(player)',
+              'GetComponentInChildren<CompanionPlayerLifecycle>()',
+              'lifecycle.RefreshLifecycleOwner()',
+              'lifecycle.MatchesPlayer(player)',
+              'return null;',
+          ]
+          for token in lookup_required:
+              assert token in lookup, token
+
+          lookup_forbidden = [
+              'Networking.SetOwner',
+              'FindObjectOfType',
+              'FindFirstObjectByType',
+          ]
+          for token in lookup_forbidden:
+              assert token not in lookup, token
+
+          # The lookup path must never silently re-enable a locally disabled companion.
+          assert 'if (preserveDisabled)' in lifecycle
+          assert 'lifecycleState = StateDisabled;' in lifecycle
+
+          print('Player lifecycle source contract OK')
+          PY
