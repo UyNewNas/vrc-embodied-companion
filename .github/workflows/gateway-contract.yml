@@ -1,0 +1,30 @@
+name: Gateway contract
+
+on:
+  pull_request:
+    paths:
+      - "gateway/**"
+      - ".github/workflows/gateway-contract.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "gateway/**"
+      - ".github/workflows/gateway-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run transport contract tests
+        working-directory: gateway
+        run: python -m unittest -v test_reference_server.py test_generate_static_pack.py
