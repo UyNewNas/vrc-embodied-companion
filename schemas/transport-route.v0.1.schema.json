@@ -43,8 +43,7 @@
     },
     "language": {
       "type": "string",
-      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
-      "maxLength": 8
+      "enum": ["zh", "en"]
     },
     "turn_slot": {
       "type": "integer",
