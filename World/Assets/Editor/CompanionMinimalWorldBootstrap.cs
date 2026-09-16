@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -51,6 +52,73 @@ internal static class CompanionMinimalWorldBootstrap
         AssetDatabase.Refresh();
 
         Debug.Log("Created minimal VRChat companion test world at " + ScenePath + ". Runtime verification is still required via VRChat Build & Test.");
+    }
+
+    [MenuItem("VRC Companion/Create, Save, Reopen and Verify Minimal Test World")]
+    public static void CreateSaveReopenAndVerifyMinimalWorld()
+    {
+        CreateOrResetMinimalWorld();
+        VerifySerializedMinimalWorld();
+    }
+
+    [MenuItem("VRC Companion/Verify Serialized Minimal Test World")]
+    public static void VerifySerializedMinimalWorld()
+    {
+        if (!File.Exists(ScenePath))
+        {
+            throw new FileNotFoundException("Minimal world scene does not exist. Run the bootstrap first.", ScenePath);
+        }
+
+        Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+        if (!scene.IsValid() || !scene.isLoaded)
+        {
+            throw new InvalidOperationException("Unity could not reopen " + ScenePath);
+        }
+
+        GameObject world = GameObject.Find("VRCWorld");
+        if (world == null)
+        {
+            throw new InvalidOperationException("Serialized scene is missing VRCWorld.");
+        }
+
+        VRCSceneDescriptor descriptor = world.GetComponent<VRCSceneDescriptor>();
+        if (descriptor == null)
+        {
+            throw new InvalidOperationException("Serialized scene is missing VRCSceneDescriptor on VRCWorld.");
+        }
+
+        if (descriptor.spawns == null || descriptor.spawns.Length != 1 || descriptor.spawns[0] == null)
+        {
+            throw new InvalidOperationException("Serialized VRCSceneDescriptor must contain exactly one non-null spawn.");
+        }
+
+        Transform spawn = descriptor.spawns[0];
+        if (spawn.name != "Spawn" || !spawn.IsChildOf(world.transform))
+        {
+            throw new InvalidOperationException("Serialized spawn must be the Spawn child of VRCWorld.");
+        }
+
+        if (GameObject.Find("CompanionPlaceholder") == null)
+        {
+            throw new InvalidOperationException("Serialized scene is missing CompanionPlaceholder.");
+        }
+
+        bool buildSceneEnabled = false;
+        foreach (EditorBuildSettingsScene buildScene in EditorBuildSettings.scenes)
+        {
+            if (buildScene.enabled && buildScene.path == ScenePath)
+            {
+                buildSceneEnabled = true;
+                break;
+            }
+        }
+
+        if (!buildSceneEnabled)
+        {
+            throw new InvalidOperationException(ScenePath + " is not enabled in EditorBuildSettings.");
+        }
+
+        Debug.Log("Verified serialized minimal VRChat companion scene: descriptor, spawn, placeholder, and build-scene entry survived save/reopen. SDK validation and VRChat Build & Test are still required.");
     }
 
     private static GameObject CreateBlock(Transform parent, string name, Vector3 position, Vector3 scale)

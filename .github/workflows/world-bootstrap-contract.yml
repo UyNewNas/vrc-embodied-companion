@@ -46,6 +46,9 @@ jobs:
               'using VRC.SDK3.Components;',
               'AddComponent<VRCSceneDescriptor>()',
               'descriptor.spawns = new[] { spawn.transform };',
+              'CreateSaveReopenAndVerifyMinimalWorld',
+              'EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single)',
+              'descriptor.spawns.Length != 1',
               'Assets/Scenes/CompanionMinimal.unity',
               'CompanionPlaceholder',
               'EditorBuildSettingsScene',
@@ -64,7 +67,10 @@ jobs:
           readme = (root / 'README.md').read_text(encoding='utf-8')
           assert 'Build & Test' in readme
           assert 'Headless VPM preflight' in readme
+          assert 'Optional Unity batchmode smoke check' in readme
+          assert 'CreateSaveReopenAndVerifyMinimalWorld' in readme
           assert 'source/bootstrap evidence only' in readme
+          assert 'looked up at editor time' not in readme
 
           print('World bootstrap source contract OK')
           PY
