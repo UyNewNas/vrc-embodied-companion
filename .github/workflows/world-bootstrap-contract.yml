@@ -52,7 +52,8 @@ jobs:
 
           readme = (root / 'README.md').read_text(encoding='utf-8')
           assert 'Build & Test' in readme
-          assert 'source bootstrap only' in readme
+          assert 'Headless VPM preflight' in readme
+          assert 'source/bootstrap evidence only' in readme
 
           print('World bootstrap source contract OK')
           PY
