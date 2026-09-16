@@ -8,12 +8,11 @@ namespace UyNewNas.VRCEmbodiedCompanion
     /// <summary>
     /// Minimal runtime probe for the bounded transport route table.
     ///
-    /// This deliberately stops before BehaviorPlan parsing or application. Its only job
-    /// is to prove the request discipline required by issue #18 once a runnable world
+    /// It proves the request discipline required by issue #18 once a runnable world
     /// exists: one request in flight, a conservative >=6 second start cadence, timeout
-    /// recovery, and callback URL matching so a delayed response cannot be applied to a
-    /// newer request.
+    /// recovery, callback URL matching, and fail-closed BehaviorPlan validation.
     ///
+    /// It intentionally stops before fallback selection or behavior execution.
     /// Unity/UdonSharp compilation and VRChat runtime behavior remain unverified until
     /// issue #2 provides a runnable VCC World project.
     /// </summary>
@@ -24,6 +23,9 @@ namespace UyNewNas.VRCEmbodiedCompanion
 
         [Header("Route table")]
         public CompanionTransportRouteBinding routeBinding;
+
+        [Header("Response validation")]
+        public CompanionBehaviorPlanValidator behaviorPlanValidator;
 
         [Header("Request discipline")]
         [Tooltip("Clamped to at least 6 seconds to stay above VRChat's documented 5 second string-download limit.")]
@@ -42,6 +44,8 @@ namespace UyNewNas.VRCEmbodiedCompanion
         public int staleCallbackCount;
         public int timeoutCount;
         public int rejectedStartCount;
+        public int validPlanCount;
+        public int rejectedPlanCount;
         public int lastAcceptedRouteIndex = -1;
         public bool lastAcceptedUsedStaticRoute;
         public string lastAcceptedUrl = "";
@@ -49,6 +53,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
         public int lastErrorCode;
         public string lastError = "";
         public string lastRejectedReason = "";
+        public string lastPlanRejectReason = "";
         public string lastIgnoredCallbackUrl = "";
 
         private float inFlightStartedAt;
@@ -125,6 +130,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             inFlightStartedAt = now;
             nextAllowedRequestAt = now + Mathf.Max(PlatformCadenceFloorSeconds, minimumRequestIntervalSeconds);
             lastRejectedReason = "";
+            lastPlanRejectReason = "";
             lastErrorCode = 0;
             lastError = "";
 
@@ -145,8 +151,32 @@ namespace UyNewNas.VRCEmbodiedCompanion
             lastAcceptedRouteIndex = inFlightRouteIndex;
             lastAcceptedUsedStaticRoute = inFlightUsesStaticRoute;
             lastAcceptedUrl = callbackUrl;
-            lastAcceptedPayload = result.Result;
             lastErrorCode = 0;
+
+            string payload = result.Result;
+            if (behaviorPlanValidator == null)
+            {
+                rejectedPlanCount++;
+                lastAcceptedPayload = "";
+                lastPlanRejectReason = "validator_missing";
+                lastError = "behavior_plan_invalid";
+                ClearInFlightState();
+                return;
+            }
+
+            if (!behaviorPlanValidator.TryValidate(payload))
+            {
+                rejectedPlanCount++;
+                lastAcceptedPayload = "";
+                lastPlanRejectReason = behaviorPlanValidator.lastRejectReason;
+                lastError = "behavior_plan_invalid";
+                ClearInFlightState();
+                return;
+            }
+
+            validPlanCount++;
+            lastAcceptedPayload = payload;
+            lastPlanRejectReason = "";
             lastError = "";
             ClearInFlightState();
         }
@@ -165,6 +195,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             lastAcceptedUsedStaticRoute = inFlightUsesStaticRoute;
             lastAcceptedUrl = callbackUrl;
             lastAcceptedPayload = "";
+            lastPlanRejectReason = "";
             lastErrorCode = result.ErrorCode;
             lastError = result.Error;
             ClearInFlightState();
