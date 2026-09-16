@@ -136,51 +136,96 @@ jobs:
           Write-Host "Resolved com.vrchat.base $($basePackage.version)"
           Write-Host "Resolved com.vrchat.worlds $($worldsPackage.version)"
           Write-Host 'VPM project recognition and package resolution OK'
-      - name: Audit resolved Worlds SDK compile surface
+      - name: Audit resolved SDK binary metadata
         shell: pwsh
         run: |
-          $worldsRoot = Resolve-Path 'World/Packages/com.vrchat.worlds'
-          $baseRoot = Resolve-Path 'World/Packages/com.vrchat.base'
-          $sdkSources = @(
-            Get-ChildItem $worldsRoot, $baseRoot -Recurse -File -Filter '*.cs'
-          )
-          if ($sdkSources.Count -eq 0) {
-            throw 'Resolved VRChat SDK packages contain no C# sources to audit'
+          $probe = Join-Path $env:RUNNER_TEMP 'VrcSdkSurfaceProbe'
+          dotnet new console --framework net8.0 --output $probe --force | Out-Null
+          @'
+          using System.Reflection.Metadata;
+          using System.Reflection.PortableExecutable;
+
+          bool descriptorFound = false;
+          bool spawnsFound = false;
+          bool udonSharpFound = false;
+          string? descriptorLocation = null;
+          string? spawnsLocation = null;
+          string? udonSharpLocation = null;
+          int managedAssemblyCount = 0;
+
+          foreach (string root in args)
+          {
+              foreach (string path in Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories))
+              {
+                  try
+                  {
+                      using FileStream stream = File.OpenRead(path);
+                      using PEReader pe = new(stream);
+                      if (!pe.HasMetadata)
+                      {
+                          continue;
+                      }
+
+                      MetadataReader reader = pe.GetMetadataReader();
+                      managedAssemblyCount++;
+                      foreach (TypeDefinitionHandle handle in reader.TypeDefinitions)
+                      {
+                          TypeDefinition type = reader.GetTypeDefinition(handle);
+                          string ns = reader.GetString(type.Namespace);
+                          string name = reader.GetString(type.Name);
+                          string fullName = string.IsNullOrEmpty(ns) ? name : ns + "." + name;
+
+                          if (fullName == "VRC.SDK3.Components.VRCSceneDescriptor")
+                          {
+                              descriptorFound = true;
+                              descriptorLocation = path;
+                          }
+
+                          if (fullName == "UdonSharp.UdonSharpBehaviour")
+                          {
+                              udonSharpFound = true;
+                              udonSharpLocation = path;
+                          }
+
+                          if (name.Contains("SceneDescriptor", StringComparison.Ordinal))
+                          {
+                              foreach (FieldDefinitionHandle fieldHandle in type.GetFields())
+                              {
+                                  FieldDefinition field = reader.GetFieldDefinition(fieldHandle);
+                                  if (reader.GetString(field.Name) == "spawns")
+                                  {
+                                      spawnsFound = true;
+                                      spawnsLocation = path + " :: " + fullName + ".spawns";
+                                  }
+                              }
+                          }
+                      }
+                  }
+                  catch (BadImageFormatException)
+                  {
+                      // Native or otherwise non-managed DLL; not relevant to the C# API surface.
+                  }
+              }
           }
 
-          $descriptorTypeHits = @(
-            $sdkSources | Select-String -Pattern '\bclass\s+VRCSceneDescriptor\b'
-          )
-          if ($descriptorTypeHits.Count -eq 0) {
-            throw 'Resolved Worlds SDK no longer exposes class VRCSceneDescriptor in source'
+          Console.WriteLine($"Managed assemblies inspected: {managedAssemblyCount}");
+          Console.WriteLine($"VRCSceneDescriptor: {(descriptorFound ? descriptorLocation : "MISSING")}");
+          Console.WriteLine($"SceneDescriptor.spawns: {(spawnsFound ? spawnsLocation : "MISSING")}");
+          Console.WriteLine($"UdonSharpBehaviour: {(udonSharpFound ? udonSharpLocation : "MISSING")}");
+
+          if (!descriptorFound || !spawnsFound || !udonSharpFound)
+          {
+              Console.Error.WriteLine("Resolved SDK binary metadata no longer matches the bootstrap/UdonSharp assumptions.");
+              return 1;
           }
 
-          $descriptorNamespaceHits = @(
-            $descriptorTypeHits | Where-Object {
-              $text = Get-Content $_.Path -Raw
-              $text -match '\bnamespace\s+VRC\.SDK3\.Components\b'
-            }
-          )
-          if ($descriptorNamespaceHits.Count -eq 0) {
-            throw 'Resolved VRCSceneDescriptor is not declared under VRC.SDK3.Components'
-          }
+          Console.WriteLine("Resolved SDK binary metadata contract OK");
+          return 0;
+          '@ | Set-Content -Path (Join-Path $probe 'Program.cs') -Encoding utf8
 
-          $spawnMemberHits = @(
-            $sdkSources | Select-String -Pattern '\bTransform\[\]\s+spawns\b'
-          )
-          if ($spawnMemberHits.Count -eq 0) {
-            throw 'Resolved SDK source no longer exposes Transform[] spawns used by the bootstrap'
+          dotnet run --project $probe --configuration Release -- `
+            'World/Packages/com.vrchat.worlds' `
+            'World/Packages/com.vrchat.base'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Resolved SDK binary metadata audit failed'
           }
-
-          $udonSharpHits = @(
-            Get-ChildItem $worldsRoot -Recurse -File |
-              Where-Object { $_.Name -match 'UdonSharp' }
-          )
-          if ($udonSharpHits.Count -eq 0) {
-            throw 'Resolved Worlds SDK has no UdonSharp-named files even though #2 requires UdonSharp setup'
-          }
-
-          Write-Host "VRCSceneDescriptor source: $($descriptorTypeHits[0].Path)"
-          Write-Host "spawns source: $($spawnMemberHits[0].Path)"
-          Write-Host "UdonSharp footprint: $($udonSharpHits.Count) matching files"
-          Write-Host 'Resolved Worlds SDK compile-surface audit OK'
