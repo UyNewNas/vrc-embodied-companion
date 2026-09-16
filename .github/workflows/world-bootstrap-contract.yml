@@ -41,14 +41,23 @@ jobs:
 
           bootstrap = (root / 'Assets/Editor/CompanionMinimalWorldBootstrap.cs').read_text(encoding='utf-8')
           required = [
-              'VRC.SDK3.Components.VRCSceneDescriptor',
+              'using VRC.SDK3.Components;',
+              'AddComponent<VRCSceneDescriptor>()',
+              'descriptor.spawns = new[] { spawn.transform };',
               'Assets/Scenes/CompanionMinimal.unity',
               'CompanionPlaceholder',
               'EditorBuildSettingsScene',
-              'MissingFieldException',
           ]
           for token in required:
               assert token in bootstrap, token
+
+          forbidden = [
+              'System.Reflection',
+              'FindType(',
+              'GetField(',
+          ]
+          for token in forbidden:
+              assert token not in bootstrap, token
 
           readme = (root / 'README.md').read_text(encoding='utf-8')
           assert 'Build & Test' in readme
@@ -112,4 +121,8 @@ jobs:
             throw "Local framework package link drifted after VPM resolve: $local"
           }
 
+          $basePackage = Get-Content 'World/Packages/com.vrchat.base/package.json' -Raw | ConvertFrom-Json
+          $worldsPackage = Get-Content 'World/Packages/com.vrchat.worlds/package.json' -Raw | ConvertFrom-Json
+          Write-Host "Resolved com.vrchat.base $($basePackage.version)"
+          Write-Host "Resolved com.vrchat.worlds $($worldsPackage.version)"
           Write-Host 'VPM project recognition and package resolution OK'
