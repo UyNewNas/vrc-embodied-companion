@@ -13,7 +13,7 @@ on:
       - '.github/workflows/world-bootstrap-contract.yml'
 
 jobs:
-  validate:
+  validate-source-shape:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,3 +56,41 @@ jobs:
 
           print('World bootstrap source contract OK')
           PY
+
+  validate-vpm-resolution:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install supported VPM CLI baseline
+        shell: pwsh
+        run: |
+          dotnet tool install --tool-path .vpm-tools VRChat.VPM.CLI --version 0.1.28
+          & .\.vpm-tools\vpm.exe --version
+      - name: Check VRChat project recognition
+        shell: pwsh
+        run: |
+          & .\.vpm-tools\vpm.exe check project World
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Resolve official VPM packages
+        shell: pwsh
+        run: |
+          & .\.vpm-tools\vpm.exe resolve project World
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify resolved package handoff
+        shell: pwsh
+        run: |
+          $base = Test-Path 'World/Packages/com.vrchat.base/package.json'
+          $worlds = Test-Path 'World/Packages/com.vrchat.worlds/package.json'
+          if (-not $base) { throw 'VPM resolve did not materialize com.vrchat.base' }
+          if (-not $worlds) { throw 'VPM resolve did not materialize com.vrchat.worlds' }
+
+          $manifest = Get-Content 'World/Packages/manifest.json' -Raw | ConvertFrom-Json
+          $local = $manifest.dependencies.'com.uynewnas.vrc-embodied-companion'
+          if ($local -ne 'file:../../Packages/com.uynewnas.vrc-embodied-companion') {
+            throw "Local framework package link drifted after VPM resolve: $local"
+          }
+
+          Write-Host 'VPM project recognition and package resolution OK'
