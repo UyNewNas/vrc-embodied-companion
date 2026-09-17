@@ -150,6 +150,12 @@ namespace UyNewNas.VRCEmbodiedCompanion
                 return;
             }
 
+            // Capture a read-only inventory before attempting the rejection probe. This independently
+            // records every player's spawned PlayerObject lifecycle through the official
+            // Networking.GetPlayerObjects path without calling RefreshLifecycleOwner or changing
+            // lifecycle state, making the ownership/isolation row easier to audit from real logs.
+            LogPlayerObjectInventory(localPlayer);
+
             VRCPlayerApi[] players = VRCPlayerApi.GetPlayers();
             for (int i = 0; i < players.Length; i++)
             {
@@ -181,6 +187,101 @@ namespace UyNewNas.VRCEmbodiedCompanion
             }
 
             LogUnavailable("remote_mutation_probe", "remote_ready_lifecycle_not_found");
+        }
+
+        private void LogPlayerObjectInventory(VRCPlayerApi localPlayer)
+        {
+            VRCPlayerApi[] players = VRCPlayerApi.GetPlayers();
+            int expectedPlayerCount = 0;
+            int lifecycleCopyCount = 0;
+            int inconsistentCount = 0;
+            int localPlayerId = localPlayer.playerId;
+
+            for (int i = 0; i < players.Length; i++)
+            {
+                VRCPlayerApi player = players[i];
+                if (!Utilities.IsValid(player))
+                {
+                    continue;
+                }
+
+                expectedPlayerCount++;
+                int targetPlayerId = player.playerId;
+                bool foundLifecycle = false;
+                GameObject[] playerObjects = Networking.GetPlayerObjects(player);
+                for (int j = 0; j < playerObjects.Length; j++)
+                {
+                    GameObject playerObject = playerObjects[j];
+                    if (!Utilities.IsValid(playerObject))
+                    {
+                        continue;
+                    }
+
+                    CompanionPlayerLifecycle lifecycle = playerObject.GetComponent<CompanionPlayerLifecycle>();
+                    if (!Utilities.IsValid(lifecycle))
+                    {
+                        continue;
+                    }
+
+                    foundLifecycle = true;
+                    lifecycleCopyCount++;
+                    VRCPlayerApi actualOwner = Networking.GetOwner(playerObject);
+                    int actualOwnerId = Utilities.IsValid(actualOwner) ? actualOwner.playerId : -1;
+                    bool consistent = actualOwnerId == targetPlayerId
+                        && lifecycle.associatedPlayerId == targetPlayerId
+                        && lifecycle.lifecycleState != CompanionPlayerLifecycle.StateDetached;
+                    string result = consistent ? "snapshot_copy_consistent" : "snapshot_copy_unexpected";
+                    if (!consistent)
+                    {
+                        inconsistentCount++;
+                    }
+
+                    Debug.Log(
+                        LogPrefix
+                        + " action=snapshot_all"
+                        + " result=" + result
+                        + " control=" + gameObject.name
+                        + " localPlayerId=" + localPlayerId
+                        + " targetPlayerId=" + targetPlayerId
+                        + " actualOwnerId=" + actualOwnerId
+                        + " associatedPlayerId=" + lifecycle.associatedPlayerId
+                        + " state=" + lifecycle.lifecycleState
+                        + " restoreObserved=" + lifecycle.restoreObserved
+                        + " localOwner=" + lifecycle.localOwner
+                        + " restoreEvents=" + lifecycle.restoreEventCount
+                        + " ignoredRestoreEvents=" + lifecycle.ignoredRestoreEventCount
+                        + " ownerMismatches=" + lifecycle.ownerMismatchCount
+                        + " detaches=" + lifecycle.detachCount
+                        + " lastAction=" + lifecycle.lastLifecycleAction);
+                }
+
+                if (!foundLifecycle)
+                {
+                    inconsistentCount++;
+                    Debug.Log(
+                        LogPrefix
+                        + " action=snapshot_all"
+                        + " result=snapshot_copy_missing"
+                        + " control=" + gameObject.name
+                        + " localPlayerId=" + localPlayerId
+                        + " targetPlayerId=" + targetPlayerId);
+                }
+            }
+
+            string summaryResult = expectedPlayerCount > 0
+                && lifecycleCopyCount == expectedPlayerCount
+                && inconsistentCount == 0
+                ? "snapshot_all_consistent"
+                : "snapshot_all_incomplete";
+            Debug.Log(
+                LogPrefix
+                + " action=snapshot_all_summary"
+                + " result=" + summaryResult
+                + " control=" + gameObject.name
+                + " localPlayerId=" + localPlayerId
+                + " expectedPlayerCount=" + expectedPlayerCount
+                + " lifecycleCopyCount=" + lifecycleCopyCount
+                + " inconsistentCount=" + inconsistentCount);
         }
 
         private CompanionPlayerLookup FindLookup()
