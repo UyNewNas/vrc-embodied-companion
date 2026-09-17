@@ -41,6 +41,7 @@ jobs:
           smoke = Path('World/Tools/Invoke-UnitySmoke.ps1').read_text(encoding='utf-8')
           host_preflight = Path('World/Tools/Test-UnitySmokeHost.ps1').read_text(encoding='utf-8')
           docs = Path('docs/UNITY_SMOKE_EXECUTION.md').read_text(encoding='utf-8')
+          expression_open = '$' + '{{'
 
           assert 'm_EditorVersion: 2022.3.22f1' in project_version
           assert "'2022.3.22f1'" in smoke
@@ -51,14 +52,14 @@ jobs:
               "description: 'Full 40-character commit SHA to test; keep the workflow itself on trusted master'",
               "if: github.ref == 'refs/heads/master'",
               'Validate dispatch target SHA',
-              'UNITY_SMOKE_INPUT_TARGET_SHA: ${{ inputs.target_sha }}',
+              'UNITY_SMOKE_INPUT_TARGET_SHA: ' + expression_open + ' inputs.target_sha }}',
               '$requested = $env:UNITY_SMOKE_INPUT_TARGET_SHA.Trim()',
               "^[0-9a-fA-F]{40}$",
               'UNITY_SMOKE_REQUESTED_SHA',
-              'ref: ${{ steps.dispatch-input.outputs.sha }}',
+              'ref: ' + expression_open + ' steps.dispatch-input.outputs.sha }}',
               'Verify immutable target checkout',
               'UNITY_SMOKE_TARGET_SHA',
-              'UNITY_SMOKE_INPUT_UNITY_PATH: ${{ inputs.unity_path }}',
+              'UNITY_SMOKE_INPUT_UNITY_PATH: ' + expression_open + ' inputs.unity_path }}',
               '$unity = $env:UNITY_SMOKE_INPUT_UNITY_PATH',
               "schema = 'unity-smoke-runner-context.v0.2'",
               'repository = $env:GITHUB_REPOSITORY',
@@ -91,7 +92,7 @@ jobs:
               'push:\n',
               'pull_request:\n',
               '-ValidateOnly',
-              'ref: ${{ inputs.target_sha }}',
+              'ref: ' + expression_open + ' inputs.target_sha }}',
           ]
           for token in forbidden:
               assert token not in workflow, token
@@ -101,7 +102,7 @@ jobs:
           # environment/default runner variables instead.
           for block in workflow.split('        run: |')[1:]:
               script = block.split('\n      - ', 1)[0]
-              assert '${{' not in script, script
+              assert expression_open not in script, script
 
           lowered = workflow.lower()
           for secretish in ('unity_serial', 'unity_username', 'unity_password', '-serial '):
