@@ -11,6 +11,7 @@ Issue #2 already has a reproducible `World/Tools/Invoke-UnitySmoke.ps1` runner. 
 - Unity documents `-version` as a command-line argument that prints the editor version without opening the editor.
 - Unity still requires an activated license to use the Editor. For the 2022.3 editor line, command-line serial activation is for Plus/Pro; Personal activation is handled through Unity Hub.
 - GitHub warns that long-lived self-hosted runners are risky for public repositories. Keep this repository's Unity runner temporary/manual-only and do not expose its registration token or Unity credentials in repository files or logs.
+- GitHub supports **ephemeral self-hosted runners** via the runner registration `--ephemeral` option. An ephemeral runner is automatically de-registered after it processes one job, which is a better fit for this public repository's one-shot manual smoke than leaving a reusable runner attached.
 
 Sources:
 
@@ -20,6 +21,7 @@ Sources:
 - https://docs.unity3d.com/2022.3/Documentation/Manual/ManagingYourUnityLicense.html
 - https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners
 - https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/use-in-a-workflow
+- https://docs.github.com/en/actions/reference/runners/self-hosted-runners
 
 ## Decision
 
@@ -79,22 +81,23 @@ $targetSha
 
 Use that exact value as the workflow's `target_sha` input. Do not substitute a mutable branch name.
 
-## Temporary self-hosted runner setup
+## Ephemeral self-hosted runner setup
 
-Because this is a public repository, prefer a **temporary runner used only for the manual smoke** rather than leaving a general-purpose development machine attached indefinitely.
+Because this is a public repository, use a **single-job ephemeral runner** for the manual smoke rather than leaving a reusable development-machine runner attached.
 
 1. Open repository **Settings -> Actions -> Runners -> New self-hosted runner** and choose Windows/x64.
-2. Use the exact download/configuration commands GitHub generates there. The registration token is time-limited; do not paste it into an issue, commit, workflow, or log.
-3. During initial configuration, add the custom label `unity-2022.3.22f1`. GitHub automatically supplies the normal `self-hosted`, `windows`, and `x64` labels for a standard Windows x64 runner.
-4. Keep the runner process active until GitHub shows it online/listening for jobs.
+2. Use the exact download/extraction command GitHub generates there. The registration token is time-limited; do not paste it into an issue, commit, workflow, or log.
+3. When running GitHub's generated Windows `config.cmd` registration command, add `--ephemeral` and assign the custom label `unity-2022.3.22f1` (for example by adding `--labels unity-2022.3.22f1`). Do not use `--no-default-labels`; the workflow also requires GitHub's normal `self-hosted`, `windows`, and `x64` labels.
+4. Keep the interactive runner process active until GitHub shows it online/listening for jobs. Do not install this one-shot runner as a Windows service.
 5. Open **Actions -> Unity 2022.3.22f1 smoke (self-hosted)**, choose **Run workflow from `master`**, and paste the reviewed full 40-character commit SHA into `target_sha`. For PR #22, use its exact current head SHA rather than the branch name.
-6. Preserve the uploaded evidence artifact. Confirm `host-preflight.json` belongs to the intended target/toolchain and `runner-context.json` contains the intended `tested_sha`, then remove/unregister the temporary runner when this validation session is finished.
+6. Preserve the uploaded evidence artifact. Confirm `host-preflight.json` belongs to the intended target/toolchain and `runner-context.json` contains the intended `tested_sha`.
+7. After the runner processes its one job, GitHub should automatically de-register the ephemeral runner. Shut down the runner process and remove the runner working directory. If the job never starts, explicitly remove the runner from repository settings instead of leaving it registered/offline.
 
-GitHub's current Windows guidance recommends `C:\actions-runner` when installing the runner application as a service. A service is not required for this one-shot smoke; an interactive temporary runner is easier to remove after the evidence is captured.
+GitHub documents that ephemeral runners are automatically de-registered after one processed job. It also notes that a matching self-hosted job can remain queued for up to 24 hours when no eligible runner is online, so register/start the runner immediately before dispatch instead of queuing the smoke long in advance.
 
 ## Minimal experiment
 
-Register or reuse one Windows x64 self-hosted GitHub Actions runner that has Unity 2022.3.22f1 already activated, add the `unity-2022.3.22f1` label, then run the workflow from `master` with the exact reviewed full 40-character commit SHA as `target_sha`.
+Prepare one Windows x64 machine with an already activated Unity 2022.3.22f1 installation, register it as an **ephemeral** self-hosted GitHub Actions runner carrying `unity-2022.3.22f1`, then run the workflow from `master` with the exact reviewed full 40-character commit SHA as `target_sha`.
 
 A successful run is real evidence for:
 
