@@ -1,0 +1,132 @@
+name: Unity 2022.3.22f1 smoke (self-hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      unity_path:
+        description: 'Activated Unity 2022.3.22f1 editor executable on the self-hosted Windows runner'
+        required: false
+        default: 'C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unity-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  unity-smoke:
+    # Deliberately not a GitHub-hosted runner. The runner must have an activated
+    # Unity license and the custom unity-2022.3.22f1 label before this job is dispatched.
+    runs-on: [self-hosted, windows, x64, unity-2022.3.22f1]
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install supported VPM CLI baseline
+        shell: pwsh
+        run: |
+          $toolDir = Join-Path $env:RUNNER_TEMP 'vpm-tools'
+          dotnet tool install --tool-path $toolDir VRChat.VPM.CLI --version 0.1.28
+          $vpm = Join-Path $toolDir 'vpm.exe'
+          & $vpm --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "VPM_EXE=$vpm" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Resolve committed VRChat SDK graph
+        shell: pwsh
+        run: |
+          & $env:VPM_EXE install templates
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $env:VPM_EXE check project World
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $env:VPM_EXE resolve project World
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $base = Get-Content 'World/Packages/com.vrchat.base/package.json' -Raw | ConvertFrom-Json
+          $worlds = Get-Content 'World/Packages/com.vrchat.worlds/package.json' -Raw | ConvertFrom-Json
+          if ($base.version -ne '3.10.5') { throw "Expected com.vrchat.base 3.10.5, got $($base.version)" }
+          if ($worlds.version -ne '3.10.5') { throw "Expected com.vrchat.worlds 3.10.5, got $($worlds.version)" }
+
+          $status = @(git status --porcelain=v1 --untracked-files=all -- World)
+          if ($status.Count -gt 0) {
+            $status | ForEach-Object { Write-Host $_ }
+            git diff -- World
+            throw 'VPM resolve changed or exposed untracked World source files.'
+          }
+
+      - name: Verify exact Unity editor before opening project
+        id: unity-preflight
+        shell: pwsh
+        run: |
+          $unity = '${{ inputs.unity_path }}'
+          if ([string]::IsNullOrWhiteSpace($unity)) {
+            $unity = 'C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe'
+          }
+          $unity = [Environment]::ExpandEnvironmentVariables($unity)
+          if (-not (Test-Path $unity -PathType Leaf)) {
+            throw "Unity executable not found at '$unity'. Install/activate 2022.3.22f1 on this runner or dispatch with unity_path."
+          }
+
+          $reported = (& $unity -version 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unity -version failed with exit code $LASTEXITCODE: $reported"
+          }
+          if ($reported -notmatch '(?m)\b2022\.3\.22f1\b') {
+            throw "Runner Unity version mismatch. Expected 2022.3.22f1, reported: $reported"
+          }
+
+          Write-Host "Unity editor: $unity"
+          Write-Host "Unity version: $reported"
+          "UNITY_EDITOR=$unity" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "UNITY_REPORTED_VERSION=$reported" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Record immutable execution context
+        shell: pwsh
+        run: |
+          $evidenceDir = Join-Path $env:RUNNER_TEMP 'unity-smoke-evidence'
+          New-Item -ItemType Directory -Force -Path $evidenceDir | Out-Null
+          $base = Get-Content 'World/Packages/com.vrchat.base/package.json' -Raw | ConvertFrom-Json
+          $worlds = Get-Content 'World/Packages/com.vrchat.worlds/package.json' -Raw | ConvertFrom-Json
+          @{
+            schema = 'unity-smoke-runner-context.v0.1'
+            repository = '${{ github.repository }}'
+            ref = '${{ github.ref }}'
+            sha = '${{ github.sha }}'
+            run_id = '${{ github.run_id }}'
+            runner_name = '${{ runner.name }}'
+            runner_os = '${{ runner.os }}'
+            runner_arch = '${{ runner.arch }}'
+            unity_path = $env:UNITY_EDITOR
+            unity_reported_version = $env:UNITY_REPORTED_VERSION
+            vrchat_base_version = $base.version
+            vrchat_worlds_version = $worlds.version
+            recorded_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
+          } | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $evidenceDir 'runner-context.json') -Encoding utf8
+          "UNITY_SMOKE_EVIDENCE_DIR=$evidenceDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Execute real Unity import / compile / save-reopen smoke
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:UNITY_SMOKE_EVIDENCE_DIR 'unity-smoke.log'
+          $summary = Join-Path $env:UNITY_SMOKE_EVIDENCE_DIR 'unity-smoke-summary.json'
+          & .\World\Tools\Invoke-UnitySmoke.ps1 `
+            -UnityPath $env:UNITY_EDITOR `
+            -LogPath $log `
+            -SummaryPath $summary
+
+      - name: Upload Unity smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-2022.3.22f1-smoke-${{ github.run_id }}
+          path: ${{ runner.temp }}\unity-smoke-evidence
+          if-no-files-found: warn
+          retention-days: 14
