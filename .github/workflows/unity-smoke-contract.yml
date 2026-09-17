@@ -1,0 +1,78 @@
+name: Unity smoke workflow contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/unity-smoke-self-hosted.yml'
+      - '.github/workflows/unity-smoke-contract.yml'
+      - 'World/Tools/Invoke-UnitySmoke.ps1'
+      - 'World/ProjectSettings/ProjectVersion.txt'
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/unity-smoke-self-hosted.yml'
+      - '.github/workflows/unity-smoke-contract.yml'
+      - 'World/Tools/Invoke-UnitySmoke.ps1'
+      - 'World/ProjectSettings/ProjectVersion.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-manual-runner-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate real-Unity execution workflow is explicit and fail-closed
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/unity-smoke-self-hosted.yml').read_text(encoding='utf-8')
+          project_version = Path('World/ProjectSettings/ProjectVersion.txt').read_text(encoding='utf-8')
+          smoke = Path('World/Tools/Invoke-UnitySmoke.ps1').read_text(encoding='utf-8')
+
+          assert 'm_EditorVersion: 2022.3.22f1' in project_version
+          assert "'2022.3.22f1'" in smoke
+
+          required = [
+              'workflow_dispatch:',
+              'runs-on: [self-hosted, windows, x64, unity-2022.3.22f1]',
+              "VRChat.VPM.CLI --version 0.1.28",
+              'resolve project World',
+              "Expected com.vrchat.base 3.10.5",
+              "Expected com.vrchat.worlds 3.10.5",
+              "& $unity -version",
+              "2022\\.3\\.22f1",
+              'Invoke-UnitySmoke.ps1',
+              'runner-context.json',
+              'unity-smoke-summary.json',
+              'actions/upload-artifact@v4',
+              'if: always()',
+          ]
+          for token in required:
+              assert token in workflow, token
+
+          forbidden = [
+              'runs-on: windows-latest',
+              'runs-on: windows-2022',
+              'push:\n',
+              'pull_request:\n',
+              '-ValidateOnly',
+          ]
+          for token in forbidden:
+              assert token not in workflow, token
+
+          # The execution job must remain manual-only and must not smuggle license
+          # credentials into the repository workflow. Activation belongs to the
+          # pre-provisioned self-hosted runner.
+          lowered = workflow.lower()
+          for secretish in ('unity_serial', 'unity_username', 'unity_password', '-serial '):
+              assert secretish not in lowered, secretish
+
+          print('Self-hosted Unity smoke workflow contract OK')
+          PY
