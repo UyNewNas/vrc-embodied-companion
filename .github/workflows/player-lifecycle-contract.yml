@@ -41,6 +41,7 @@ jobs:
               'StateReady',
               'StateDisabled',
               'StateDetached',
+              'start_owner_unavailable',
               'public override void OnPlayerRestored(VRCPlayerApi player)',
               'restore_ignored_detached',
               'restore_owner_invalid_after_binding',
@@ -69,6 +70,16 @@ jobs:
           ]
           for token in lifecycle_forbidden:
               assert token not in lifecycle, token
+
+          # VRChat documents PlayerObject ownership as already correct in Start. A runtime copy that
+          # reaches Start without a valid owner must therefore fail closed instead of remaining in an
+          # ownerless StateSpawned limbo and becoming discoverable later through an unrelated path.
+          start_body = lifecycle.split('private void Start()', 1)[1]
+          start_body = start_body.split('public override void OnPlayerRestored(VRCPlayerApi player)', 1)[0]
+          assert 'RefreshOwner("start")' in start_body
+          assert 'if (lifecycleState == StateSpawned && associatedPlayerId < 0)' in start_body
+          assert 'MarkDetached("start_owner_unavailable")' in start_body
+          assert start_body.index('RefreshOwner("start")') < start_body.index('MarkDetached("start_owner_unavailable")')
 
           # OnPlayerRestored fires once for every player, so an unrelated event is normal. What is
           # not normal is the actual PlayerObject owner changing after this lifecycle has bound. The
