@@ -64,6 +64,41 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Initialize Unity smoke evidence directory
+        shell: pwsh
+        run: |
+          $evidenceDir = Join-Path $env:RUNNER_TEMP 'unity-smoke-evidence'
+          New-Item -ItemType Directory -Force -Path $evidenceDir | Out-Null
+          "UNITY_SMOKE_EVIDENCE_DIR=$evidenceDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Run checked-in host preflight
+        shell: pwsh
+        env:
+          UNITY_SMOKE_INPUT_UNITY_PATH: ${{ inputs.unity_path }}
+        run: |
+          $unity = $env:UNITY_SMOKE_INPUT_UNITY_PATH
+          if ([string]::IsNullOrWhiteSpace($unity)) {
+            $unity = 'C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe'
+          }
+
+          $preflight = Join-Path $env:UNITY_SMOKE_EVIDENCE_DIR 'host-preflight.json'
+          & .\World\Tools\Test-UnitySmokeHost.ps1 `
+            -UnityPath $unity `
+            -OutputPath $preflight
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $report = Get-Content $preflight -Raw | ConvertFrom-Json
+          if (-not $report.windows) { throw 'Host preflight did not certify Windows.' }
+          if ($report.os_architecture -ne 'X64') { throw "Host preflight architecture mismatch: $($report.os_architecture)" }
+          if ($report.expected_unity_version -ne '2022.3.22f1') { throw "Host preflight expected Unity version mismatch: $($report.expected_unity_version)" }
+          if (-not $report.world_contract_valid) { throw 'Host preflight did not certify the World smoke contract.' }
+          if ($report.unity_license_verified -ne $false) { throw 'Host preflight must not claim Unity license verification.' }
+
+          Write-Host "Unity editor: $($report.unity_path)"
+          Write-Host "Unity version: $($report.unity_reported_version)"
+          "UNITY_EDITOR=$($report.unity_path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "UNITY_REPORTED_VERSION=$($report.unity_reported_version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Install supported VPM CLI baseline
         shell: pwsh
         run: |
@@ -96,39 +131,9 @@ jobs:
             throw 'VPM resolve changed or exposed untracked World source files.'
           }
 
-      - name: Verify exact Unity editor before opening project
-        id: unity-preflight
-        shell: pwsh
-        env:
-          UNITY_SMOKE_INPUT_UNITY_PATH: ${{ inputs.unity_path }}
-        run: |
-          $unity = $env:UNITY_SMOKE_INPUT_UNITY_PATH
-          if ([string]::IsNullOrWhiteSpace($unity)) {
-            $unity = 'C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe'
-          }
-          $unity = [Environment]::ExpandEnvironmentVariables($unity)
-          if (-not (Test-Path $unity -PathType Leaf)) {
-            throw "Unity executable not found at '$unity'. Install/activate 2022.3.22f1 on this runner or dispatch with unity_path."
-          }
-
-          $reported = (& $unity -version 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) {
-            throw "Unity -version failed with exit code $LASTEXITCODE: $reported"
-          }
-          if ($reported -notmatch '(?m)\b2022\.3\.22f1\b') {
-            throw "Runner Unity version mismatch. Expected 2022.3.22f1, reported: $reported"
-          }
-
-          Write-Host "Unity editor: $unity"
-          Write-Host "Unity version: $reported"
-          "UNITY_EDITOR=$unity" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "UNITY_REPORTED_VERSION=$reported" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - name: Record immutable execution context
         shell: pwsh
         run: |
-          $evidenceDir = Join-Path $env:RUNNER_TEMP 'unity-smoke-evidence'
-          New-Item -ItemType Directory -Force -Path $evidenceDir | Out-Null
           $base = Get-Content 'World/Packages/com.vrchat.base/package.json' -Raw | ConvertFrom-Json
           $worlds = Get-Content 'World/Packages/com.vrchat.worlds/package.json' -Raw | ConvertFrom-Json
           @{
@@ -146,8 +151,7 @@ jobs:
             vrchat_base_version = $base.version
             vrchat_worlds_version = $worlds.version
             recorded_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
-          } | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $evidenceDir 'runner-context.json') -Encoding utf8
-          "UNITY_SMOKE_EVIDENCE_DIR=$evidenceDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $env:UNITY_SMOKE_EVIDENCE_DIR 'runner-context.json') -Encoding utf8
 
       - name: Execute real Unity import / compile / save-reopen smoke
         shell: pwsh

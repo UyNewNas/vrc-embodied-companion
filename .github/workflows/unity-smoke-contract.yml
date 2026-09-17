@@ -59,8 +59,21 @@ jobs:
               'ref: ' + expression_open + ' steps.dispatch-input.outputs.sha }}',
               'Verify immutable target checkout',
               'UNITY_SMOKE_TARGET_SHA',
+              'Initialize Unity smoke evidence directory',
+              "Join-Path $env:RUNNER_TEMP 'unity-smoke-evidence'",
+              'Run checked-in host preflight',
               'UNITY_SMOKE_INPUT_UNITY_PATH: ' + expression_open + ' inputs.unity_path }}',
               '$unity = $env:UNITY_SMOKE_INPUT_UNITY_PATH',
+              'Test-UnitySmokeHost.ps1',
+              "Join-Path $env:UNITY_SMOKE_EVIDENCE_DIR 'host-preflight.json'",
+              '-OutputPath $preflight',
+              'Get-Content $preflight -Raw | ConvertFrom-Json',
+              '$report.os_architecture',
+              '$report.expected_unity_version',
+              '$report.world_contract_valid',
+              '$report.unity_license_verified',
+              'UNITY_EDITOR=$($report.unity_path)',
+              'UNITY_REPORTED_VERSION=$($report.unity_reported_version)',
               "schema = 'unity-smoke-runner-context.v0.2'",
               'repository = $env:GITHUB_REPOSITORY',
               'workflow_ref = $env:GITHUB_REF',
@@ -75,8 +88,6 @@ jobs:
               'resolve project World',
               "Expected com.vrchat.base 3.10.5",
               "Expected com.vrchat.worlds 3.10.5",
-              "& $unity -version",
-              "2022\\.3\\.22f1",
               'Invoke-UnitySmoke.ps1',
               'runner-context.json',
               'unity-smoke-summary.json',
@@ -111,10 +122,12 @@ jobs:
           preflight_required = [
               "$expectedUnityVersion = '2022.3.22f1'",
               "$env:OS -ne 'Windows_NT'",
-              "OSArchitecture",
-              "Invoke-UnitySmoke.ps1",
-              "-ValidateOnly",
-              "unity_license_verified = $false",
+              'OSArchitecture',
+              '& $UnityPath -version',
+              "2022\\.3\\.22f1",
+              'Invoke-UnitySmoke.ps1',
+              '-ValidateOnly',
+              'unity_license_verified = $false',
               "required_runner_labels = @('self-hosted', 'windows', 'x64', 'unity-2022.3.22f1')",
           ]
           for token in preflight_required:
@@ -130,6 +143,8 @@ jobs:
           assert 'full 40-character commit sha' in docs.lower()
           assert 'run workflow from `master`' in docs.lower()
           assert 'tested_sha' in docs
+          assert 'host-preflight.json' in docs
+          assert 'reruns the checked-in host preflight' in docs.lower()
 
           print('Self-hosted Unity smoke workflow/host preflight contract OK')
           PY
