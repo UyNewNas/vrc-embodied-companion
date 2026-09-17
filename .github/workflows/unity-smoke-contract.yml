@@ -41,6 +41,7 @@ jobs:
           smoke = Path('World/Tools/Invoke-UnitySmoke.ps1').read_text(encoding='utf-8')
           host_preflight = Path('World/Tools/Test-UnitySmokeHost.ps1').read_text(encoding='utf-8')
           docs = Path('docs/UNITY_SMOKE_EXECUTION.md').read_text(encoding='utf-8')
+          expression_open = '$' + '{{'
 
           assert 'm_EditorVersion: 2022.3.22f1' in project_version
           assert "'2022.3.22f1'" in smoke
@@ -49,12 +50,26 @@ jobs:
               'workflow_dispatch:',
               'target_sha:',
               "description: 'Full 40-character commit SHA to test; keep the workflow itself on trusted master'",
-              'ref: ${{ inputs.target_sha }}',
-              'Verify immutable target checkout',
+              "if: github.ref == 'refs/heads/master'",
+              'Validate dispatch target SHA',
+              'UNITY_SMOKE_INPUT_TARGET_SHA: ' + expression_open + ' inputs.target_sha }}',
+              '$requested = $env:UNITY_SMOKE_INPUT_TARGET_SHA.Trim()',
               "^[0-9a-fA-F]{40}$",
+              'UNITY_SMOKE_REQUESTED_SHA',
+              'ref: ' + expression_open + ' steps.dispatch-input.outputs.sha }}',
+              'Verify immutable target checkout',
               'UNITY_SMOKE_TARGET_SHA',
+              'UNITY_SMOKE_INPUT_UNITY_PATH: ' + expression_open + ' inputs.unity_path }}',
+              '$unity = $env:UNITY_SMOKE_INPUT_UNITY_PATH',
               "schema = 'unity-smoke-runner-context.v0.2'",
+              'repository = $env:GITHUB_REPOSITORY',
+              'workflow_ref = $env:GITHUB_REF',
+              'workflow_sha = $env:GITHUB_SHA',
               'tested_sha = $env:UNITY_SMOKE_TARGET_SHA',
+              'run_id = $env:GITHUB_RUN_ID',
+              'runner_name = $env:RUNNER_NAME',
+              'runner_os = $env:RUNNER_OS',
+              'runner_arch = $env:RUNNER_ARCH',
               'runs-on: [self-hosted, windows, x64, unity-2022.3.22f1]',
               "VRChat.VPM.CLI --version 0.1.28",
               'resolve project World',
@@ -77,9 +92,17 @@ jobs:
               'push:\n',
               'pull_request:\n',
               '-ValidateOnly',
+              'ref: ' + expression_open + ' inputs.target_sha }}',
           ]
           for token in forbidden:
               assert token not in workflow, token
+
+          # GitHub evaluates expressions before writing an inline shell script. Keep
+          # dispatch/context values out of every `run: |` block and pass them through
+          # environment/default runner variables instead.
+          for block in workflow.split('        run: |')[1:]:
+              script = block.split('\n      - ', 1)[0]
+              assert expression_open not in script, script
 
           lowered = workflow.lower()
           for secretish in ('unity_serial', 'unity_username', 'unity_password', '-serial '):
