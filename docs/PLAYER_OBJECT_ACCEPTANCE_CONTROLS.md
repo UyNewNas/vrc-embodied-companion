@@ -37,6 +37,18 @@ The remote rejection path intentionally updates local diagnostic text (`lastLife
 6. Repeat steps 4-5 on B against A.
 7. Continue the leave/rejoin and persistence boundary rows from the main runtime matrix.
 
+## Current platform basis
+
+Rechecked against VRChat Creator documentation on 2026-09-17:
+
+- UdonSharp `public override void Interact()` is the supported interaction event, and the object needs a collider to receive interaction.
+- `VRCPlayerApi.GetPlayers()` returns the players currently in the instance; the allocating overload is appropriate here because the development-only remote probe runs only on explicit interaction rather than every frame.
+
+Sources:
+
+- <https://creators.vrchat.com/worlds/examples/udon/>
+- <https://creators.vrchat.com/worlds/udon/players/getting-players/>
+
 ## Scope and safety boundary
 
 `CompanionLifecycleAcceptanceControl` is test instrumentation only. It contains no `[UdonSynced]` state, never calls `RequestSerialization`, never calls `Networking.SetOwner`, and never sends a network event. It uses the current VRChat player enumeration API only when a tester interacts with the remote probe; this is not a per-frame production code path.
