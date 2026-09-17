@@ -1,0 +1,115 @@
+name: Lifecycle acceptance controls contract
+
+on:
+  pull_request:
+    paths:
+      - 'World/Assets/Scripts/CompanionLifecycleAcceptanceControl.cs'
+      - 'World/Assets/Editor/CompanionMinimalWorldBootstrap.cs'
+      - 'docs/PLAYER_OBJECT_ACCEPTANCE_CONTROLS.md'
+      - '.github/workflows/lifecycle-acceptance-controls-contract.yml'
+  push:
+    branches:
+      - master
+    paths:
+      - 'World/Assets/Scripts/CompanionLifecycleAcceptanceControl.cs'
+      - 'World/Assets/Editor/CompanionMinimalWorldBootstrap.cs'
+      - 'docs/PLAYER_OBJECT_ACCEPTANCE_CONTROLS.md'
+      - '.github/workflows/lifecycle-acceptance-controls-contract.yml'
+
+jobs:
+  validate-source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate acceptance-control boundary
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          control = Path('World/Assets/Scripts/CompanionLifecycleAcceptanceControl.cs').read_text(encoding='utf-8')
+          bootstrap = Path('World/Assets/Editor/CompanionMinimalWorldBootstrap.cs').read_text(encoding='utf-8')
+          docs = Path('docs/PLAYER_OBJECT_ACCEPTANCE_CONTROLS.md').read_text(encoding='utf-8')
+
+          required_control = [
+              'public override void Interact()',
+              'LifecycleControl-LocalToggle',
+              'LifecycleControl-LocalRefresh',
+              'LifecycleControl-RemoteMutationProbe',
+              '[VRC Companion Lifecycle Control]',
+              'lookup.FindForPlayer(localPlayer)',
+              'VRCPlayerApi.GetPlayers()',
+              'Networking.GetPlayerObjects(player)',
+              'playerObject.GetComponent<CompanionPlayerLifecycle>()',
+              'lookup.FindForPlayer(player)',
+              'lifecycle.lifecycleState != CompanionPlayerLifecycle.StateReady',
+              'lifecycle.DisableForLocalOwner()',
+              'lifecycle.EnableForLocalOwner()',
+              'lifecycle.RefreshLifecycleOwner()',
+              'lifecycle.lifecycleState == beforeState',
+              'disabled_by_local_owner',
+              'enabled_by_local_owner',
+              'manual_refresh_owner_valid_disabled',
+              'manual_refresh_owner_valid_ready',
+              'local_disable_succeeded',
+              'local_enable_succeeded',
+              'local_toggle_unexpected',
+              'local_refresh_preserved',
+              'local_refresh_unexpected',
+              'snapshot_copy_consistent',
+              'snapshot_copy_unexpected',
+              'snapshot_copy_missing',
+              'snapshot_all_consistent',
+              'snapshot_all_incomplete',
+              'action=snapshot_all_summary',
+              'disable_rejected_not_local_ready',
+              'remote_mutation_rejected',
+              'remote_mutation_unexpected',
+          ]
+          for token in required_control:
+              assert token in control, token
+
+          forbidden_control = [
+              '[UdonSynced]',
+              'RequestSerialization',
+              'Networking.SetOwner',
+              'SendCustomNetworkEvent',
+          ]
+          for token in forbidden_control:
+              assert token not in control, token
+
+          required_bootstrap = [
+              'CreateLifecycleControl(',
+              'CompanionLifecycleAcceptanceControl.LocalToggleControlName',
+              'CompanionLifecycleAcceptanceControl.LocalRefreshControlName',
+              'CompanionLifecycleAcceptanceControl.RemoteMutationProbeControlName',
+              'control.AddUdonSharpComponent<CompanionLifecycleAcceptanceControl>()',
+              'VerifyLifecycleControl(',
+              'control.GetComponent<Collider>()',
+              'control.GetComponent<CompanionLifecycleAcceptanceControl>()',
+          ]
+          for token in required_bootstrap:
+              assert token in bootstrap, token
+
+          required_docs = [
+              'LifecycleControl-LocalToggle',
+              'LifecycleControl-LocalRefresh',
+              'LifecycleControl-RemoteMutationProbe',
+              '[VRC Companion Lifecycle Control]',
+              'result=local_disable_succeeded',
+              'result=local_enable_succeeded',
+              'result=local_refresh_preserved',
+              'result=snapshot_all_consistent',
+              'result=snapshot_copy_consistent',
+              'Networking.GetPlayerObjects(player)',
+              'result=remote_mutation_rejected',
+              'real Unity smoke prerequisite',
+              'No result in this document is claimed',
+          ]
+          for token in required_docs:
+              assert token in docs, token
+
+          print('Lifecycle acceptance controls source contract OK')
+          PY

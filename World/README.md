@@ -57,10 +57,19 @@ The bootstrap command creates, deterministically:
 - one spawn transform assigned directly to `descriptor.spawns`;
 - a small floor/three-wall test room;
 - one capsule named `CompanionPlaceholder`;
+- one `CompanionPlayerObjectTemplate` carrying both `VRCPlayerObject` and `CompanionPlayerLifecycle`, with the UdonSharp behaviour created through UdonSharp's editor API;
+- one scene-level `CompanionRuntime` carrying `CompanionPlayerLookup`, also created through UdonSharp's editor API;
 - one directional light;
 - one enabled build scene at `Assets/Scenes/CompanionMinimal.unity`.
 
-The combined verification command saves the scene, reopens it from disk, then fails closed unless the descriptor, its single `Spawn` child, the placeholder, and the enabled build-scene entry all survive serialization. This is an **Editor serialization smoke check**, not a substitute for VRChat SDK validation or Build & Test.
+The PlayerObject wiring is deliberately **logical-state integration only**. VRChat's current PlayerObject contract automatically instantiates the template once per joining player and permits Udon behaviours on the template or its children. The lifecycle stays on the PlayerObject root so its ownership checks query the PlayerObject ownership anchor directly instead of depending on an unsynced child's ownership semantics. Presentation privacy remains issue #11, and persistent synced fields remain issue #7; this lifecycle prototype does not add `VRCEnablePersistence`.
+
+The combined verification command saves the scene, reopens it from disk, then fails closed unless the descriptor, its single `Spawn` child, the placeholder, the PlayerObject template, lifecycle component, lookup service, and enabled build-scene entry all survive serialization. This is an **Editor serialization smoke check**, not a substitute for VRChat SDK validation or Build & Test.
+
+PlayerObject/UdonSharp references:
+
+- https://creators.vrchat.com/worlds/udon/persistence/player-object/
+- https://creators.vrchat.com/worlds/udon/udonsharp/editorscripting/
 
 ## Optional Unity batchmode smoke check
 
@@ -80,7 +89,7 @@ The runner reads the required editor version from `ProjectVersion.txt`, locates 
 It writes machine-local evidence to ignored paths:
 
 - `World/Logs/unity-smoke.log`
-- `World/Logs/unity-smoke-summary.json`
+- `World/Logs/world-unity-smoke-summary.json`
 
 The JSON summary records the exact editor path/version, timestamps, exit code, success-marker state, generated-artifact checks, and whether the log matches the known `UUM-57742` OpenScene batchmode crash signature. CI executes the same script with `-ValidateOnly`, which validates the project version and execute-method contract without pretending that a Unity editor is available on the hosted runner.
 
@@ -98,18 +107,19 @@ Unity references for this caveat:
 - https://unity.com/releases/editor/whats-new/2022.3.22f1
 - https://issuetracker.unity3d.com/issues/crash-in-collectmanagedimportdependencygetters-inside-openscene-in-batch-mode
 
-A successful batchmode run would still provide real Unity import/compile/bootstrap/serialization evidence. It would **not** prove VRChat SDK validation, client launch, spawn placement in the VRChat client, or PC/Quest behavior.
+A successful batchmode run would still provide real Unity import/compile/bootstrap/serialization evidence. It would **not** prove VRChat SDK validation, client launch, spawn placement in the VRChat client, PlayerObject networking semantics, or PC/Quest behavior.
 
 ## Evidence still required before closing #2
 
 A clean Windows CI runner now recognizes this directory with the official VPM CLI and resolves the committed VRChat SDK graph. The branch is still **source/bootstrap evidence only** until somebody opens it in the supported Unity/VCC environment. Do not claim any of the following until actually observed:
 
 - VCC/Unity imports the resolved project without errors;
-- the editor script compiles and the combined bootstrap/verification command succeeds;
+- UdonSharp compiles the lifecycle/lookup behaviours and the combined bootstrap/verification command succeeds;
 - Unity resolves the repository-local package on Windows from a fresh clone;
-- `VRCSceneDescriptor.spawns` survives serialization/reopen (the verifier is the minimum reproducible check for this);
+- `VRCSceneDescriptor.spawns` and the PlayerObject lifecycle wiring survive serialization/reopen (the verifier is the minimum reproducible check for this);
 - the scene passes VRChat SDK validation;
 - Build & Test launches the world;
-- the placeholder is visible and the spawn lands inside the room.
+- the placeholder is visible and the spawn lands inside the room;
+- PlayerObject ownership/restore/isolation behavior passes issue #12's two-client matrix.
 
 After the first successful open, commit only stable project artifacts that improve reproducibility. Keep `Library/`, `Temp/`, `Logs/`, generated IDE files, and other machine-local state ignored.

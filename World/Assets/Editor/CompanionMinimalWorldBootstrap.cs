@@ -1,9 +1,11 @@
 using System;
 using System.IO;
+using UdonSharpEditor;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UyNewNas.VRCEmbodiedCompanion;
 using VRC.SDK3.Components;
 
 internal static class CompanionMinimalWorldBootstrap
@@ -35,6 +37,38 @@ internal static class CompanionMinimalWorldBootstrap
         GameObject companion = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         companion.name = "CompanionPlaceholder";
         companion.transform.position = new Vector3(0f, 1f, 1.5f);
+
+        // Issue #4 logical lifecycle integration. Keep the lifecycle behaviour on the PlayerObject
+        // root so Networking.GetOwner(gameObject) reads the ownership anchor VRChat assigns to that
+        // PlayerObject instead of relying on ownership semantics of an unsynced child object.
+        // Visual/audio presentation remains a separate runtime experiment (#11).
+        GameObject playerObjectTemplate = new GameObject("CompanionPlayerObjectTemplate");
+        playerObjectTemplate.AddComponent<VRCPlayerObject>();
+        playerObjectTemplate.AddUdonSharpComponent<CompanionPlayerLifecycle>();
+
+        // Development-only runtime evidence for #4/#12. The probe logs each restore/leave callback
+        // and then emits a one-frame-delayed snapshot from the same PlayerObject root. It never owns
+        // lifecycle decisions or synchronized state, and can be removed from production worlds.
+        playerObjectTemplate.AddUdonSharpComponent<CompanionPlayerLifecycleDebugProbe>();
+
+        GameObject runtimeServices = new GameObject("CompanionRuntime");
+        runtimeServices.AddUdonSharpComponent<CompanionPlayerLookup>();
+
+        // Development-only acceptance controls make #12's mutation/refresh rows executable from
+        // inside a real two-client Build & Test session instead of requiring inspector or ad-hoc
+        // Udon invocation. GameObject.CreatePrimitive supplies the collider required by Interact.
+        CreateLifecycleControl(
+            CompanionLifecycleAcceptanceControl.LocalToggleControlName,
+            "Local toggle",
+            new Vector3(-2f, 0.6f, -0.5f));
+        CreateLifecycleControl(
+            CompanionLifecycleAcceptanceControl.LocalRefreshControlName,
+            "Local refresh",
+            new Vector3(0f, 0.6f, -0.5f));
+        CreateLifecycleControl(
+            CompanionLifecycleAcceptanceControl.RemoteMutationProbeControlName,
+            "Remote mutation probe",
+            new Vector3(2f, 0.6f, -0.5f));
 
         GameObject lightObject = new GameObject("Directional Light");
         Light light = lightObject.AddComponent<Light>();
@@ -104,6 +138,38 @@ internal static class CompanionMinimalWorldBootstrap
             throw new InvalidOperationException("Serialized scene is missing CompanionPlaceholder.");
         }
 
+        GameObject playerObjectTemplate = GameObject.Find("CompanionPlayerObjectTemplate");
+        if (playerObjectTemplate == null)
+        {
+            throw new InvalidOperationException("Serialized scene is missing CompanionPlayerObjectTemplate.");
+        }
+
+        if (playerObjectTemplate.GetComponent<VRCPlayerObject>() == null)
+        {
+            throw new InvalidOperationException("CompanionPlayerObjectTemplate is missing VRCPlayerObject.");
+        }
+
+        if (playerObjectTemplate.GetComponent<CompanionPlayerLifecycle>() == null)
+        {
+            throw new InvalidOperationException("CompanionPlayerObjectTemplate is missing CompanionPlayerLifecycle on the PlayerObject root.");
+        }
+
+        CompanionPlayerLifecycleDebugProbe debugProbe = playerObjectTemplate.GetComponent<CompanionPlayerLifecycleDebugProbe>();
+        if (debugProbe == null || !debugProbe.loggingEnabled)
+        {
+            throw new InvalidOperationException("CompanionPlayerObjectTemplate is missing the enabled lifecycle debug probe required by the acceptance world.");
+        }
+
+        GameObject runtimeServices = GameObject.Find("CompanionRuntime");
+        if (runtimeServices == null || runtimeServices.GetComponent<CompanionPlayerLookup>() == null)
+        {
+            throw new InvalidOperationException("Serialized scene is missing CompanionRuntime with CompanionPlayerLookup.");
+        }
+
+        VerifyLifecycleControl(CompanionLifecycleAcceptanceControl.LocalToggleControlName);
+        VerifyLifecycleControl(CompanionLifecycleAcceptanceControl.LocalRefreshControlName);
+        VerifyLifecycleControl(CompanionLifecycleAcceptanceControl.RemoteMutationProbeControlName);
+
         bool buildSceneEnabled = false;
         foreach (EditorBuildSettingsScene buildScene in EditorBuildSettings.scenes)
         {
@@ -119,11 +185,48 @@ internal static class CompanionMinimalWorldBootstrap
             throw new InvalidOperationException(ScenePath + " is not enabled in EditorBuildSettings.");
         }
 
-        // Keep a short machine-readable marker stable even as human diagnostics evolve.
-        // Invoke-UnitySmoke.ps1 keys off this token so future verifier assertions cannot
+        // Keep a short machine-readable marker stable even as the human diagnostics below evolve.
+        // Invoke-UnitySmoke.ps1 keys off this token so adding new verifier assertions cannot silently
         // turn a real successful Unity run into a false-negative evidence result.
         Debug.Log(UnitySmokePassMarker);
-        Debug.Log("Verified serialized minimal VRChat companion scene: descriptor, spawn, placeholder, and build-scene entry survived save/reopen. SDK validation and VRChat Build & Test are still required.");
+        Debug.Log("Verified serialized minimal VRChat companion scene: descriptor, spawn, placeholder, PlayerObject lifecycle template, enabled evidence probe, lookup service, acceptance controls, and build-scene entry survived save/reopen. SDK validation and VRChat Build & Test are still required.");
+    }
+
+    private static void CreateLifecycleControl(string name, string label, Vector3 position)
+    {
+        GameObject control = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        control.name = name;
+        control.transform.position = position;
+        control.transform.localScale = new Vector3(1.6f, 0.3f, 0.6f);
+        control.AddUdonSharpComponent<CompanionLifecycleAcceptanceControl>();
+
+        GameObject labelObject = new GameObject(name + "-Label");
+        labelObject.transform.position = position + new Vector3(0f, 0.35f, -0.31f);
+        labelObject.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+        TextMesh text = labelObject.AddComponent<TextMesh>();
+        text.text = label;
+        text.fontSize = 48;
+        text.characterSize = 0.08f;
+        text.anchor = TextAnchor.MiddleCenter;
+    }
+
+    private static void VerifyLifecycleControl(string name)
+    {
+        GameObject control = GameObject.Find(name);
+        if (control == null)
+        {
+            throw new InvalidOperationException("Serialized scene is missing lifecycle acceptance control " + name + ".");
+        }
+
+        if (control.GetComponent<Collider>() == null)
+        {
+            throw new InvalidOperationException("Lifecycle acceptance control " + name + " is missing the collider required by Interact.");
+        }
+
+        if (control.GetComponent<CompanionLifecycleAcceptanceControl>() == null)
+        {
+            throw new InvalidOperationException("Lifecycle acceptance control " + name + " is missing its UdonSharp behaviour.");
+        }
     }
 
     private static GameObject CreateBlock(Transform parent, string name, Vector3 position, Vector3 scale)

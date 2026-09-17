@@ -1,0 +1,144 @@
+name: PlayerObject SDK surface
+
+on:
+  pull_request:
+    paths:
+      - 'World/Assets/Editor/CompanionMinimalWorldBootstrap.cs'
+      - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLifecycle.cs'
+      - '.github/workflows/playerobject-sdk-surface.yml'
+  push:
+    branches:
+      - master
+    paths:
+      - 'World/Assets/Editor/CompanionMinimalWorldBootstrap.cs'
+      - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLifecycle.cs'
+      - '.github/workflows/playerobject-sdk-surface.yml'
+
+jobs:
+  validate-resolved-sdk-surface:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Resolve committed VRChat SDK graph
+        shell: pwsh
+        run: |
+          dotnet tool install --tool-path .vpm-tools VRChat.VPM.CLI --version 0.1.28
+          & .\.vpm-tools\vpm.exe install templates
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\.vpm-tools\vpm.exe resolve project World
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Inspect PlayerObject and UdonSharp editor surface
+        shell: pwsh
+        run: |
+          $probe = Join-Path $env:RUNNER_TEMP 'PlayerObjectSurfaceProbe'
+          $report = Join-Path $env:RUNNER_TEMP 'playerobject-sdk-surface.txt'
+          dotnet new console --framework net8.0 --output $probe --force | Out-Null
+          @'
+          using System.Reflection.Metadata;
+          using System.Reflection.PortableExecutable;
+
+          Dictionary<string, string?> requiredTypes = new()
+          {
+              ["VRC.SDK3.Components.VRCPlayerObject"] = null,
+              ["VRC.SDK3.Components.VRCEnablePersistence"] = null,
+          };
+
+          int managedAssemblyCount = 0;
+          string? udonSharpEditorApi = null;
+
+          foreach (string root in args.Skip(1))
+          {
+              foreach (string path in Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories))
+              {
+                  try
+                  {
+                      using FileStream stream = File.OpenRead(path);
+                      using PEReader pe = new(stream);
+                      if (!pe.HasMetadata)
+                      {
+                          continue;
+                      }
+
+                      MetadataReader reader = pe.GetMetadataReader();
+                      managedAssemblyCount++;
+                      foreach (TypeDefinitionHandle handle in reader.TypeDefinitions)
+                      {
+                          TypeDefinition type = reader.GetTypeDefinition(handle);
+                          string ns = reader.GetString(type.Namespace);
+                          string name = reader.GetString(type.Name);
+                          string fullName = string.IsNullOrEmpty(ns) ? name : ns + "." + name;
+                          if (requiredTypes.ContainsKey(fullName))
+                          {
+                              requiredTypes[fullName] = path;
+                          }
+                      }
+                  }
+                  catch (BadImageFormatException)
+                  {
+                      // Native/non-managed DLL; irrelevant to the C# API surface.
+                  }
+              }
+
+              foreach (string path in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+              {
+                  string text = File.ReadAllText(path);
+                  if (text.Contains("namespace UdonSharpEditor", StringComparison.Ordinal) &&
+                      text.Contains("class UdonSharpComponentExtensions", StringComparison.Ordinal) &&
+                      text.Contains("AddUdonSharpComponent", StringComparison.Ordinal))
+                  {
+                      udonSharpEditorApi = path;
+                  }
+              }
+          }
+
+          string reportPath = args[0];
+          using StreamWriter report = new(reportPath, false);
+          void Emit(string line)
+          {
+              Console.WriteLine(line);
+              report.WriteLine(line);
+          }
+
+          Emit($"Managed assemblies inspected: {managedAssemblyCount}");
+          bool ok = true;
+          foreach ((string fullName, string? location) in requiredTypes)
+          {
+              Emit($"{fullName}: {(location ?? "MISSING")}");
+              ok &= location is not null;
+          }
+
+          Emit($"UdonSharpEditor.AddUdonSharpComponent source: {(udonSharpEditorApi ?? "MISSING")}");
+          ok &= udonSharpEditorApi is not null;
+
+          if (!ok)
+          {
+              Console.Error.WriteLine("Resolved SDK 3.10.5 no longer exposes the exact PlayerObject/UdonSharp editor API surface assumed by the minimal world integration.");
+              return 1;
+          }
+
+          Emit("Resolved PlayerObject/UdonSharp editor surface OK");
+          return 0;
+          '@ | Set-Content -Path (Join-Path $probe 'Program.cs') -Encoding utf8
+
+          dotnet run --project $probe --configuration Release -- `
+            $report `
+            'World/Packages/com.vrchat.worlds' `
+            'World/Packages/com.vrchat.base'
+          $code = $LASTEXITCODE
+          if (Test-Path $report) {
+            Get-Content $report
+          }
+          if ($code -ne 0) {
+            throw 'Resolved PlayerObject/UdonSharp editor surface audit failed; inspect the uploaded diagnostic artifact.'
+          }
+      - name: Upload PlayerObject surface diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playerobject-sdk-surface
+          path: ${{ runner.temp }}/playerobject-sdk-surface.txt
+          if-no-files-found: warn
+          retention-days: 7
