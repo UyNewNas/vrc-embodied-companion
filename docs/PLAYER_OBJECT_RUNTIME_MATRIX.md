@@ -45,6 +45,8 @@ pwsh -File .\World\Tools\Invoke-UnitySmoke.ps1
 
 The smoke result must show real Unity execution and a successful `CreateSaveReopenAndVerifyMinimalWorld` result. Do not substitute `-ValidateOnly`, VPM resolution, or GitHub source-contract workflows for this prerequisite.
 
+The generated acceptance world must also retain an enabled `CompanionPlayerLifecycleDebugProbe` on the same `CompanionPlayerObjectTemplate` root. The save/reopen verifier fails if the probe is missing or disabled.
+
 ## 3. Runtime observables
 
 For every PlayerObject copy capture, at minimum:
@@ -61,7 +63,18 @@ For every PlayerObject copy capture, at minimum:
 - `detachCount`;
 - `lastLifecycleAction`.
 
-If a temporary debug UI is added for the run, keep it development-only and record the exact commit containing it. Console logs are acceptable if they contain the same fields and can be attributed to a specific PlayerObject.
+### Built-in evidence probe
+
+The minimal acceptance world now wires `CompanionPlayerLifecycleDebugProbe` onto the PlayerObject root. It is development-only observability: it does not sync variables, transfer ownership, or make lifecycle decisions.
+
+It emits two stable log prefixes:
+
+- `[VRC Companion Lifecycle Callback]` records the callback kind, callback player id, actual owner id, and callback counters immediately when `OnPlayerRestored` / `OnPlayerLeft` is observed;
+- `[VRC Companion Lifecycle Snapshot]` records a one-frame-delayed post-event snapshot with actual owner id, associated player id, local player id, lifecycle state, restore/local-owner flags, counters, and `lastLifecycleAction`.
+
+The one-frame delay is intentional: callback receipt is captured immediately, while the follow-up snapshot gives the sibling lifecycle behaviour a frame to process the same VRChat event. VRChat documents both `Debug.Log` as the standard Udon debugging path and delayed custom events as supported Udon behavior; neither log line is treated as proof until it is produced by a real Unity/VRChat run.
+
+If a different temporary debug UI is added for the run, record the exact commit containing it. The built-in console probe is preferred because it keeps the evidence path deterministic and leaves presentation/privacy experiments in #11.
 
 ## 4. Core two-client matrix
 
@@ -88,7 +101,7 @@ These probes exist so the fixes found by source review are tested as behavior ra
    Put A in `disabled`, trigger any path that calls `RefreshLifecycleOwner`, and verify state stays `disabled` while the owner remains valid.
 
 2. **Correct UdonSharp editor wiring**  
-   Open the generated scene after save/reopen and verify the PlayerObject root has a functioning Udon behaviour/program for `CompanionPlayerLifecycle`, and `CompanionRuntime` has a functioning `CompanionPlayerLookup`. Missing/broken backing Udon setup is a failure.
+   Open the generated scene after save/reopen and verify the PlayerObject root has a functioning Udon behaviour/program for `CompanionPlayerLifecycle`, the enabled `CompanionPlayerLifecycleDebugProbe`, and `CompanionRuntime` has a functioning `CompanionPlayerLookup`. Missing/broken backing Udon setup is a failure.
 
 3. **Invalid leave callback cleanup**  
    During A leave, verify the old A lifecycle cannot remain discoverable as ready/disabled merely because the callback player reference became invalid.
@@ -127,6 +140,7 @@ Attach or link the following to #12:
 
 - commit SHA and environment versions;
 - Unity smoke summary/log from the same checkout;
+- client output logs containing the stable lifecycle callback/snapshot prefixes;
 - screenshots or logs showing A/B PlayerObject identity and owner IDs;
 - ordered lifecycle event log for join -> restore -> disable/enable -> leave -> rejoin;
 - before/after local mutation values for both clients;
