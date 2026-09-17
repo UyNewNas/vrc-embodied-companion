@@ -44,11 +44,17 @@ if ($bootstrapText -notmatch [regex]::Escape('public static void CreateSaveReope
     throw "Bootstrap source no longer exposes the expected execute method: $executeMethod"
 }
 
+$successMarker = 'VRC_COMPANION_UNITY_SMOKE_PASS:v1'
+if (-not $bootstrapText.Contains($successMarker)) {
+    throw "Bootstrap source no longer emits the stable Unity smoke success marker: $successMarker"
+}
+
 if ($ValidateOnly) {
     Write-Host 'Unity smoke runner contract OK'
     Write-Host "Project: $ProjectPath"
     Write-Host "Unity: $unityVersion"
     Write-Host "Execute method: $executeMethod"
+    Write-Host "Success marker: $successMarker"
     return
 }
 
@@ -117,7 +123,6 @@ $exitCode = $LASTEXITCODE
 $finishedAt = [DateTimeOffset]::UtcNow
 
 $logText = if (Test-Path $LogPath -PathType Leaf) { Get-Content $LogPath -Raw } else { '' }
-$successMarker = 'Verified serialized minimal VRChat companion scene: descriptor, spawn, placeholder, and build-scene entry survived save/reopen.'
 $markerSeen = $logText.Contains($successMarker)
 $knownBatchmodeOpenSceneCrash = ($logText -match 'CollectManagedImportDependencyGetters') -and ($logText -match 'OpenScene')
 $scenePath = Join-Path $ProjectPath 'Assets\Scenes\CompanionMinimal.unity'
