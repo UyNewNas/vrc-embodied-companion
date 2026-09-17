@@ -13,9 +13,9 @@ The bootstrap creates three collider-backed cubes near the spawn point. VRChat's
 |---|---|---|
 | `LifecycleControl-LocalToggle` | Toggle the current client's own ready lifecycle between enabled and disabled. | A ready local copy becomes `disabled_by_local_owner`; a disabled restored local copy becomes `enabled_by_local_owner`. |
 | `LifecycleControl-LocalRefresh` | Call `RefreshLifecycleOwner()` on the current client's own lifecycle. | A valid ready lifecycle stays ready; a disabled restored lifecycle stays disabled. |
-| `LifecycleControl-RemoteMutationProbe` | Find the first valid non-local player lifecycle and call the same disable path on it. | The remote lifecycle state must not become disabled on this client. The attempted mutation should be rejected by the local-owner gate. |
+| `LifecycleControl-RemoteMutationProbe` | Find the first **ready** non-local player lifecycle and call the same disable path on it. | The emitted control line must report `result=remote_mutation_rejected`, `beforeState == afterState`, and `afterAction=disable_rejected_not_local_ready`. |
 
-Run the local and remote controls from both client A and client B. Wait until both PlayerObjects have observed their matching restore callback before judging the remote-mutation row; `remote_lifecycle_not_found` is setup/not-ready evidence, not a pass.
+Run the local and remote controls from both client A and client B. Wait until both PlayerObjects have observed their matching restore callback before judging the remote-mutation row. `remote_ready_lifecycle_not_found` is setup/not-ready evidence, not a pass.
 
 ## Stable evidence log
 
@@ -23,9 +23,9 @@ Every interaction emits a line beginning with:
 
 `[VRC Companion Lifecycle Control]`
 
-The line records the action, control object, local player id, target player id, actual owner id, associated player id, before/after lifecycle state, before/after lifecycle action, restore flag, and local-owner flag. Unavailable/setup cases use the same prefix plus a `result=` reason.
+The line records the action, result, control object, local player id, target player id, actual owner id, associated player id, before/after lifecycle state, before/after lifecycle action, restore flag, and local-owner flag. Unavailable/setup cases use the same prefix plus a `result=` reason.
 
-The remote rejection path may update local diagnostic text (`lastLifecycleAction`) on the attempted remote copy. The protected lifecycle state must remain unchanged; diagnostics are not relationship state and must not be interpreted as a cross-player mutation.
+The remote rejection path intentionally updates local diagnostic text (`lastLifecycleAction`) on the attempted remote copy to `disable_rejected_not_local_ready`. The protected lifecycle state must remain unchanged; diagnostics are not relationship state and must not be interpreted as a cross-player mutation.
 
 ## Acceptance sequence
 
@@ -33,7 +33,7 @@ The remote rejection path may update local diagnostic text (`lastLifecycleAction
 2. Start VRChat Build & Test with at least two clients.
 3. Capture the existing `[VRC Companion Lifecycle Callback]` and `[VRC Companion Lifecycle Snapshot]` logs until both players are restored.
 4. On A, interact with `LocalToggle`, then `LocalRefresh`, then `LocalToggle` again. Confirm disabled survives refresh and only the local owner can re-enable it.
-5. On A, interact with `RemoteMutationProbe`. Confirm the selected B lifecycle state does not change to disabled.
+5. On A, interact with `RemoteMutationProbe`. Require `result=remote_mutation_rejected` and unchanged lifecycle state for B's copy.
 6. Repeat steps 4-5 on B against A.
 7. Continue the leave/rejoin and persistence boundary rows from the main runtime matrix.
 

@@ -77,7 +77,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
                 lifecycle.DisableForLocalOwner();
             }
 
-            LogLifecycle("local_toggle", localPlayer, lifecycle, beforeState, beforeAction);
+            LogLifecycle("local_toggle", "local_toggle_observed", localPlayer, lifecycle, beforeState, beforeAction);
         }
 
         private void RunLocalRefresh()
@@ -100,7 +100,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
             int beforeState = lifecycle.lifecycleState;
             string beforeAction = lifecycle.lastLifecycleAction;
             lifecycle.RefreshLifecycleOwner();
-            LogLifecycle("local_refresh", localPlayer, lifecycle, beforeState, beforeAction);
+            LogLifecycle("local_refresh", "local_refresh_observed", localPlayer, lifecycle, beforeState, beforeAction);
         }
 
         private void RunRemoteMutationProbe()
@@ -123,7 +123,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
                 }
 
                 CompanionPlayerLifecycle lifecycle = lookup.FindForPlayer(player);
-                if (!Utilities.IsValid(lifecycle))
+                if (!Utilities.IsValid(lifecycle) || lifecycle.lifecycleState != CompanionPlayerLifecycle.StateReady)
                 {
                     continue;
                 }
@@ -131,11 +131,19 @@ namespace UyNewNas.VRCEmbodiedCompanion
                 int beforeState = lifecycle.lifecycleState;
                 string beforeAction = lifecycle.lastLifecycleAction;
                 lifecycle.DisableForLocalOwner();
-                LogLifecycle("remote_mutation_probe", player, lifecycle, beforeState, beforeAction);
+
+                string result = "remote_mutation_unexpected";
+                if (lifecycle.lifecycleState == beforeState
+                    && lifecycle.lastLifecycleAction == "disable_rejected_not_local_ready")
+                {
+                    result = "remote_mutation_rejected";
+                }
+
+                LogLifecycle("remote_mutation_probe", result, player, lifecycle, beforeState, beforeAction);
                 return;
             }
 
-            LogUnavailable("remote_mutation_probe", "remote_lifecycle_not_found");
+            LogUnavailable("remote_mutation_probe", "remote_ready_lifecycle_not_found");
         }
 
         private CompanionPlayerLookup FindLookup()
@@ -151,6 +159,7 @@ namespace UyNewNas.VRCEmbodiedCompanion
 
         private void LogLifecycle(
             string action,
+            string result,
             VRCPlayerApi targetPlayer,
             CompanionPlayerLifecycle lifecycle,
             int beforeState,
@@ -162,10 +171,11 @@ namespace UyNewNas.VRCEmbodiedCompanion
             int targetPlayerId = Utilities.IsValid(targetPlayer) ? targetPlayer.playerId : -1;
             int actualOwnerId = Utilities.IsValid(actualOwner) ? actualOwner.playerId : -1;
 
-            lastControlResult = action + "_observed";
+            lastControlResult = result;
             Debug.Log(
                 LogPrefix
                 + " action=" + action
+                + " result=" + result
                 + " control=" + gameObject.name
                 + " localPlayerId=" + localPlayerId
                 + " targetPlayerId=" + targetPlayerId

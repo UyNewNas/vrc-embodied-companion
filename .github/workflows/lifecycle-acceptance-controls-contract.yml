@@ -42,9 +42,14 @@ jobs:
               'lookup.FindForPlayer(localPlayer)',
               'VRCPlayerApi.GetPlayers()',
               'lookup.FindForPlayer(player)',
+              'lifecycle.lifecycleState != CompanionPlayerLifecycle.StateReady',
               'lifecycle.DisableForLocalOwner()',
               'lifecycle.EnableForLocalOwner()',
               'lifecycle.RefreshLifecycleOwner()',
+              'lifecycle.lifecycleState == beforeState',
+              'disable_rejected_not_local_ready',
+              'remote_mutation_rejected',
+              'remote_mutation_unexpected',
           ]
           for token in required_control:
               assert token in control, token
@@ -76,6 +81,7 @@ jobs:
               'LifecycleControl-LocalRefresh',
               'LifecycleControl-RemoteMutationProbe',
               '[VRC Companion Lifecycle Control]',
+              'result=remote_mutation_rejected',
               'real Unity smoke prerequisite',
               'No result in this document is claimed',
           ]
