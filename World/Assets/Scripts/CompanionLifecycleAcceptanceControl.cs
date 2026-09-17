@@ -68,16 +68,35 @@ namespace UyNewNas.VRCEmbodiedCompanion
 
             int beforeState = lifecycle.lifecycleState;
             string beforeAction = lifecycle.lastLifecycleAction;
+            if (beforeState == CompanionPlayerLifecycle.StateReady)
+            {
+                lifecycle.DisableForLocalOwner();
+                string result = "local_toggle_unexpected";
+                if (lifecycle.lifecycleState == CompanionPlayerLifecycle.StateDisabled
+                    && lifecycle.lastLifecycleAction == "disabled_by_local_owner")
+                {
+                    result = "local_disable_succeeded";
+                }
+
+                LogLifecycle("local_toggle", result, localPlayer, lifecycle, beforeState, beforeAction);
+                return;
+            }
+
             if (beforeState == CompanionPlayerLifecycle.StateDisabled)
             {
                 lifecycle.EnableForLocalOwner();
-            }
-            else
-            {
-                lifecycle.DisableForLocalOwner();
+                string result = "local_toggle_unexpected";
+                if (lifecycle.lifecycleState == CompanionPlayerLifecycle.StateReady
+                    && lifecycle.lastLifecycleAction == "enabled_by_local_owner")
+                {
+                    result = "local_enable_succeeded";
+                }
+
+                LogLifecycle("local_toggle", result, localPlayer, lifecycle, beforeState, beforeAction);
+                return;
             }
 
-            LogLifecycle("local_toggle", "local_toggle_observed", localPlayer, lifecycle, beforeState, beforeAction);
+            LogLifecycle("local_toggle", "local_toggle_not_ready", localPlayer, lifecycle, beforeState, beforeAction);
         }
 
         private void RunLocalRefresh()
@@ -99,8 +118,26 @@ namespace UyNewNas.VRCEmbodiedCompanion
 
             int beforeState = lifecycle.lifecycleState;
             string beforeAction = lifecycle.lastLifecycleAction;
+            if (beforeState != CompanionPlayerLifecycle.StateReady
+                && beforeState != CompanionPlayerLifecycle.StateDisabled)
+            {
+                LogLifecycle("local_refresh", "local_refresh_not_ready", localPlayer, lifecycle, beforeState, beforeAction);
+                return;
+            }
+
             lifecycle.RefreshLifecycleOwner();
-            LogLifecycle("local_refresh", "local_refresh_observed", localPlayer, lifecycle, beforeState, beforeAction);
+
+            string expectedAction = beforeState == CompanionPlayerLifecycle.StateDisabled
+                ? "manual_refresh_owner_valid_disabled"
+                : "manual_refresh_owner_valid_ready";
+            string result = "local_refresh_unexpected";
+            if (lifecycle.lifecycleState == beforeState
+                && lifecycle.lastLifecycleAction == expectedAction)
+            {
+                result = "local_refresh_preserved";
+            }
+
+            LogLifecycle("local_refresh", result, localPlayer, lifecycle, beforeState, beforeAction);
         }
 
         private void RunRemoteMutationProbe()
