@@ -6,7 +6,9 @@ on:
       - '.github/workflows/unity-smoke-self-hosted.yml'
       - '.github/workflows/unity-smoke-contract.yml'
       - 'World/Tools/Invoke-UnitySmoke.ps1'
+      - 'World/Tools/Test-UnitySmokeHost.ps1'
       - 'World/ProjectSettings/ProjectVersion.txt'
+      - 'docs/UNITY_SMOKE_EXECUTION.md'
   push:
     branches:
       - master
@@ -14,7 +16,9 @@ on:
       - '.github/workflows/unity-smoke-self-hosted.yml'
       - '.github/workflows/unity-smoke-contract.yml'
       - 'World/Tools/Invoke-UnitySmoke.ps1'
+      - 'World/Tools/Test-UnitySmokeHost.ps1'
       - 'World/ProjectSettings/ProjectVersion.txt'
+      - 'docs/UNITY_SMOKE_EXECUTION.md'
 
 permissions:
   contents: read
@@ -35,6 +39,8 @@ jobs:
           workflow = Path('.github/workflows/unity-smoke-self-hosted.yml').read_text(encoding='utf-8')
           project_version = Path('World/ProjectSettings/ProjectVersion.txt').read_text(encoding='utf-8')
           smoke = Path('World/Tools/Invoke-UnitySmoke.ps1').read_text(encoding='utf-8')
+          host_preflight = Path('World/Tools/Test-UnitySmokeHost.ps1').read_text(encoding='utf-8')
+          docs = Path('docs/UNITY_SMOKE_EXECUTION.md').read_text(encoding='utf-8')
 
           assert 'm_EditorVersion: 2022.3.22f1' in project_version
           assert "'2022.3.22f1'" in smoke
@@ -67,12 +73,29 @@ jobs:
           for token in forbidden:
               assert token not in workflow, token
 
-          # The execution job must remain manual-only and must not smuggle license
-          # credentials into the repository workflow. Activation belongs to the
-          # pre-provisioned self-hosted runner.
           lowered = workflow.lower()
           for secretish in ('unity_serial', 'unity_username', 'unity_password', '-serial '):
               assert secretish not in lowered, secretish
 
-          print('Self-hosted Unity smoke workflow contract OK')
+          preflight_required = [
+              "$expectedUnityVersion = '2022.3.22f1'",
+              "$env:OS -ne 'Windows_NT'",
+              "OSArchitecture",
+              "Invoke-UnitySmoke.ps1",
+              "-ValidateOnly",
+              "unity_license_verified = $false",
+              "required_runner_labels = @('self-hosted', 'windows', 'x64', 'unity-2022.3.22f1')",
+          ]
+          for token in preflight_required:
+              assert token in host_preflight, token
+
+          preflight_lowered = host_preflight.lower()
+          for secretish in ('registration_token', 'unity_serial', 'unity_username', 'unity_password', '-serial '):
+              assert secretish not in preflight_lowered, secretish
+
+          assert 'temporary runner' in docs.lower()
+          assert 'unity_license_verified=false' in docs
+          assert 'do not paste it into an issue, commit, workflow, or log' in docs.lower()
+
+          print('Self-hosted Unity smoke workflow/host preflight contract OK')
           PY

@@ -10,6 +10,7 @@ Issue #2 already has a reproducible `World/Tools/Invoke-UnitySmoke.ps1` runner. 
 - GitHub's current `windows-2022` hosted-runner inventory does **not** list Unity Editor as preinstalled software.
 - Unity documents `-version` as a command-line argument that prints the editor version without opening the editor.
 - Unity still requires an activated license to use the Editor. For the 2022.3 editor line, command-line serial activation is for Plus/Pro; Personal activation is handled through Unity Hub.
+- GitHub warns that long-lived self-hosted runners are risky for public repositories. Keep this repository's Unity runner temporary/manual-only and do not expose its registration token or Unity credentials in repository files or logs.
 
 Sources:
 
@@ -17,6 +18,8 @@ Sources:
 - https://github.com/actions/runner-images/blob/main/images/windows/Windows2022-Readme.md
 - https://docs.unity3d.com/2022.3/Documentation/Manual/EditorCommandLineArguments.html
 - https://docs.unity3d.com/2022.3/Documentation/Manual/ManagingYourUnityLicense.html
+- https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners
+- https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/use-in-a-workflow
 
 ## Decision
 
@@ -45,6 +48,35 @@ Before Unity opens the project, the workflow:
 9. uploads the Unity log, JSON smoke summary, and runner context even when the smoke step fails.
 
 A separate hosted `Unity smoke workflow contract` check verifies that this execution workflow stays manual-only, self-hosted, version-pinned, evidence-producing, and free of embedded Unity activation credentials.
+
+## Prepare the Windows host before registering it
+
+On the intended Windows x64 machine, clone/check out the exact branch you want to test and run:
+
+```powershell
+.\World\Tools\Test-UnitySmokeHost.ps1
+```
+
+If Unity is installed somewhere else:
+
+```powershell
+.\World\Tools\Test-UnitySmokeHost.ps1 -UnityPath 'D:\Unity\2022.3.22f1\Editor\Unity.exe' -OutputPath '.artifacts\unity-host-preflight.json'
+```
+
+The preflight validates Windows/x64, the exact Unity editor version, the committed World Unity version, and the repository smoke-runner contract. It intentionally records `unity_license_verified=false`: `Unity.exe -version` is not proof that the license can actually open the project. Only the real smoke invocation may claim that evidence.
+
+## Temporary self-hosted runner setup
+
+Because this is a public repository, prefer a **temporary runner used only for the manual smoke** rather than leaving a general-purpose development machine attached indefinitely.
+
+1. Open repository **Settings -> Actions -> Runners -> New self-hosted runner** and choose Windows/x64.
+2. Use the exact download/configuration commands GitHub generates there. The registration token is time-limited; do not paste it into an issue, commit, workflow, or log.
+3. During initial configuration, add the custom label `unity-2022.3.22f1`. GitHub automatically supplies the normal `self-hosted`, `windows`, and `x64` labels for a standard Windows x64 runner.
+4. Keep the runner process active until GitHub shows it online/listening for jobs.
+5. Manually dispatch **Unity 2022.3.22f1 smoke (self-hosted)** for the exact branch/SHA under test.
+6. Preserve the uploaded evidence artifact and then remove/unregister the temporary runner when this validation session is finished.
+
+GitHub's current Windows guidance recommends `C:\actions-runner` when installing the runner application as a service. A service is not required for this one-shot smoke; an interactive temporary runner is easier to remove after the evidence is captured.
 
 ## Minimal experiment
 
