@@ -47,6 +47,14 @@ jobs:
 
           required = [
               'workflow_dispatch:',
+              'target_sha:',
+              "description: 'Full 40-character commit SHA to test; keep the workflow itself on trusted master'",
+              'ref: ${{ inputs.target_sha }}',
+              'Verify immutable target checkout',
+              "^[0-9a-fA-F]{40}$",
+              'UNITY_SMOKE_TARGET_SHA',
+              "schema = 'unity-smoke-runner-context.v0.2'",
+              'tested_sha = $env:UNITY_SMOKE_TARGET_SHA',
               'runs-on: [self-hosted, windows, x64, unity-2022.3.22f1]',
               "VRChat.VPM.CLI --version 0.1.28",
               'resolve project World',
@@ -96,6 +104,9 @@ jobs:
           assert 'temporary runner' in docs.lower()
           assert 'unity_license_verified=false' in docs
           assert 'do not paste it into an issue, commit, workflow, or log' in docs.lower()
+          assert 'full 40-character commit sha' in docs.lower()
+          assert 'run workflow from `master`' in docs.lower()
+          assert 'tested_sha' in docs
 
           print('Self-hosted Unity smoke workflow/host preflight contract OK')
           PY
