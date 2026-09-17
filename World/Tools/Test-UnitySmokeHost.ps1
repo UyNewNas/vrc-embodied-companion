@@ -9,7 +9,7 @@ $expectedUnityVersion = '2022.3.22f1'
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptRoot '..\..')).Path
 
-if (-not $IsWindows) {
+if ($env:OS -ne 'Windows_NT') {
     throw 'The real Unity smoke host must be Windows. This preflight does not certify Linux/macOS hosts.'
 }
 
