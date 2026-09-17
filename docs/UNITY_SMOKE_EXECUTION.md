@@ -11,6 +11,7 @@ Issue #2 already has a reproducible `World/Tools/Invoke-UnitySmoke.ps1` runner. 
 - Unity documents `-version` as a command-line argument that prints the editor version without opening the editor.
 - Unity still requires an activated license to use the Editor. For the 2022.3 editor line, command-line serial activation is for Plus/Pro; Personal activation is handled through Unity Hub.
 - GitHub warns that long-lived self-hosted runners are risky for public repositories. Keep this repository's Unity runner temporary/manual-only and do not expose its registration token or Unity credentials in repository files or logs.
+- GitHub supports **ephemeral self-hosted runners** via the runner registration `--ephemeral` option. An ephemeral runner is automatically de-registered after it processes one job, which is a better fit for this public repository's one-shot manual smoke than leaving a reusable runner attached.
 
 Sources:
 
@@ -20,6 +21,7 @@ Sources:
 - https://docs.unity3d.com/2022.3/Documentation/Manual/ManagingYourUnityLicense.html
 - https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners
 - https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/use-in-a-workflow
+- https://docs.github.com/en/actions/reference/runners/self-hosted-runners
 
 ## Decision
 
@@ -35,23 +37,25 @@ It requires a self-hosted Windows x64 runner carrying the custom label:
 
 The runner must already have an activated Unity **2022.3.22f1** installation. The workflow defaults to the normal Unity Hub path and also accepts an explicit `unity_path` when dispatched.
 
-Before Unity opens the project, the workflow:
+The workflow itself should be dispatched from trusted `master`, while the required `target_sha` input names the immutable checkout under test. `target_sha` must be a **full 40-character commit SHA**. This avoids a branch moving between runner preparation and execution, and it lets a reviewed PR head be tested without taking the workflow definition from that PR branch. Do not use the temporary runner to execute unreviewed fork commits.
 
-1. checks out the exact GitHub SHA under test;
-2. installs the pinned VRChat VPM CLI (`0.1.28`);
-3. installs official VPM templates and resolves the committed World project;
-4. requires `com.vrchat.base == 3.10.5` and `com.vrchat.worlds == 3.10.5`;
-5. requires the VPM resolve to leave tracked World sources clean;
-6. runs `Unity.exe -version` and rejects anything other than `2022.3.22f1`;
-7. records immutable runner/ref/SDK/editor context;
+Before the real Unity smoke opens/imports the project, the workflow:
+
+1. checks out the exact `target_sha` supplied by the operator;
+2. verifies `git rev-parse HEAD` equals that full 40-character SHA and exports it as `UNITY_SMOKE_TARGET_SHA`;
+3. initializes the evidence directory and reruns the checked-in host preflight from that exact target checkout;
+4. saves the preflight result as `host-preflight.json` and fail-closes unless it certifies Windows/x64, the exact `2022.3.22f1` editor, and the World smoke source contract;
+5. installs the pinned VRChat VPM CLI (`0.1.28`), installs official templates, and resolves the committed World project;
+6. requires `com.vrchat.base == 3.10.5` and `com.vrchat.worlds == 3.10.5`, and requires VPM resolution to leave tracked World sources clean;
+7. records immutable runner/ref/SDK/editor context, including separate `workflow_sha` and `tested_sha` fields;
 8. executes the real `Invoke-UnitySmoke.ps1` import/compile/bootstrap/save-reopen check;
-9. uploads the Unity log, JSON smoke summary, and runner context even when the smoke step fails.
+9. uploads `host-preflight.json`, the runner context, Unity log, and JSON smoke summary even when the smoke step fails.
 
-A separate hosted `Unity smoke workflow contract` check verifies that this execution workflow stays manual-only, self-hosted, version-pinned, evidence-producing, and free of embedded Unity activation credentials.
+A separate hosted `Unity smoke workflow contract` check verifies that this execution workflow stays manual-only, self-hosted, version-pinned, immutable-targeted, evidence-producing, and free of embedded Unity activation credentials. It also locks the requirement that the real workflow itself executes `Test-UnitySmokeHost.ps1`; the operator-only preflight is not accepted as a substitute.
 
 ## Prepare the Windows host before registering it
 
-On the intended Windows x64 machine, clone/check out the exact branch you want to test and run:
+On the intended Windows x64 machine, clone/check out the exact commit you want to test and run:
 
 ```powershell
 .\World\Tools\Test-UnitySmokeHost.ps1
@@ -63,27 +67,42 @@ If Unity is installed somewhere else:
 .\World\Tools\Test-UnitySmokeHost.ps1 -UnityPath 'D:\Unity\2022.3.22f1\Editor\Unity.exe' -OutputPath '.artifacts\unity-host-preflight.json'
 ```
 
-The preflight validates Windows/x64, the exact Unity editor version, the committed World Unity version, and the repository smoke-runner contract. It intentionally records `unity_license_verified=false`: `Unity.exe -version` is not proof that the license can actually open the project. Only the real smoke invocation may claim that evidence.
+The operator-side preflight is still recommended because it catches a bad host before a temporary runner is registered. The workflow then **reruns the checked-in host preflight after the immutable target SHA has been checked out** and preserves `host-preflight.json` with the run evidence. This prevents a skipped manual step or a stale/misapplied runner label from silently becoming runtime evidence.
 
-## Temporary self-hosted runner setup
+The preflight validates Windows/x64, the exact Unity editor version, the committed World Unity version, and the repository smoke-runner contract. It intentionally records `unity_license_verified=false`: `Unity.exe -version` is not proof that the license can actually open the project. `host-preflight.json` is therefore host/toolchain evidence, **not** Unity activation, import, compile, SDK-validation, or Build & Test evidence. Only the real smoke invocation may establish the import/compile/save-reopen portion.
 
-Because this is a public repository, prefer a **temporary runner used only for the manual smoke** rather than leaving a general-purpose development machine attached indefinitely.
+Record the exact target before registering the runner:
+
+```powershell
+$targetSha = (git rev-parse HEAD).Trim()
+if ($targetSha -notmatch '^[0-9a-f]{40}$') { throw "Expected a full commit SHA, got $targetSha" }
+$targetSha
+```
+
+Use that exact value as the workflow's `target_sha` input. Do not substitute a mutable branch name.
+
+## Ephemeral self-hosted runner setup
+
+Because this is a public repository, use a **single-job ephemeral runner** for the manual smoke rather than leaving a reusable development-machine runner attached.
 
 1. Open repository **Settings -> Actions -> Runners -> New self-hosted runner** and choose Windows/x64.
-2. Use the exact download/configuration commands GitHub generates there. The registration token is time-limited; do not paste it into an issue, commit, workflow, or log.
-3. During initial configuration, add the custom label `unity-2022.3.22f1`. GitHub automatically supplies the normal `self-hosted`, `windows`, and `x64` labels for a standard Windows x64 runner.
-4. Keep the runner process active until GitHub shows it online/listening for jobs.
-5. Manually dispatch **Unity 2022.3.22f1 smoke (self-hosted)** for the exact branch/SHA under test.
-6. Preserve the uploaded evidence artifact and then remove/unregister the temporary runner when this validation session is finished.
+2. Use the exact download/extraction command GitHub generates there. The registration token is time-limited; do not paste it into an issue, commit, workflow, or log.
+3. When running GitHub's generated Windows `config.cmd` registration command, add `--ephemeral` and assign the custom label `unity-2022.3.22f1` (for example by adding `--labels unity-2022.3.22f1`). Do not use `--no-default-labels`; the workflow also requires GitHub's normal `self-hosted`, `windows`, and `x64` labels.
+4. Keep the interactive runner process active until GitHub shows it online/listening for jobs. Do not install this one-shot runner as a Windows service.
+5. Open **Actions -> Unity 2022.3.22f1 smoke (self-hosted)**, choose **Run workflow from `master`**, and paste the reviewed full 40-character commit SHA into `target_sha`. For PR #22, use its exact current head SHA rather than the branch name.
+6. Preserve the uploaded evidence artifact. Confirm `host-preflight.json` belongs to the intended target/toolchain and `runner-context.json` contains the intended `tested_sha`.
+7. After the runner processes its one job, GitHub should automatically de-register the ephemeral runner. Shut down the runner process and remove the runner working directory. If the job never starts, explicitly remove the runner from repository settings instead of leaving it registered/offline.
 
-GitHub's current Windows guidance recommends `C:\actions-runner` when installing the runner application as a service. A service is not required for this one-shot smoke; an interactive temporary runner is easier to remove after the evidence is captured.
+GitHub documents that ephemeral runners are automatically de-registered after one processed job. It also notes that a matching self-hosted job can remain queued for up to 24 hours when no eligible runner is online, so register/start the runner immediately before dispatch instead of queuing the smoke long in advance.
 
 ## Minimal experiment
 
-Register or reuse one Windows x64 self-hosted GitHub Actions runner that has Unity 2022.3.22f1 already activated, add the `unity-2022.3.22f1` label, then manually dispatch **Unity 2022.3.22f1 smoke (self-hosted)** from the commit/branch being tested.
+Prepare one Windows x64 machine with an already activated Unity 2022.3.22f1 installation, register it as an **ephemeral** self-hosted GitHub Actions runner carrying `unity-2022.3.22f1`, then run the workflow from `master` with the exact reviewed full 40-character commit SHA as `target_sha`.
 
 A successful run is real evidence for:
 
+- the exact `tested_sha` recorded in the artifact;
+- the workflow-enforced host/toolchain preflight recorded in `host-preflight.json`;
 - VPM package resolution on the execution machine;
 - Unity project import;
 - C#/UdonSharp compilation reached by opening the project;
