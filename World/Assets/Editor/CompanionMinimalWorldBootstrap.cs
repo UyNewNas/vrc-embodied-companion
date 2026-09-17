@@ -11,6 +11,7 @@ using VRC.SDK3.Components;
 internal static class CompanionMinimalWorldBootstrap
 {
     private const string ScenePath = "Assets/Scenes/CompanionMinimal.unity";
+    private const string UnitySmokePassMarker = "VRC_COMPANION_UNITY_SMOKE_PASS:v1";
 
     [MenuItem("VRC Companion/Create or Reset Minimal Test World")]
     public static void CreateOrResetMinimalWorld()
@@ -164,6 +165,10 @@ internal static class CompanionMinimalWorldBootstrap
             throw new InvalidOperationException(ScenePath + " is not enabled in EditorBuildSettings.");
         }
 
+        // Keep a short machine-readable marker stable even as the human diagnostics below evolve.
+        // Invoke-UnitySmoke.ps1 keys off this token so adding new verifier assertions cannot silently
+        // turn a real successful Unity run into a false-negative evidence result.
+        Debug.Log(UnitySmokePassMarker);
         Debug.Log("Verified serialized minimal VRChat companion scene: descriptor, spawn, placeholder, PlayerObject lifecycle template, enabled evidence probe, lookup service, and build-scene entry survived save/reopen. SDK validation and VRChat Build & Test are still required.");
     }
 
