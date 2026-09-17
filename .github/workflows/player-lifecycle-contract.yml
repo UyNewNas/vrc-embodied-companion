@@ -7,6 +7,7 @@ on:
       - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLookup.cs'
       - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/README.md'
       - 'World/Assets/Editor/CompanionMinimalWorldBootstrap.cs'
+      - 'World/Assets/Scripts/CompanionPlayerLifecycleDebugProbe.cs'
       - '.github/workflows/player-lifecycle-contract.yml'
   push:
     branches:
@@ -15,6 +16,7 @@ on:
       - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLifecycle.cs'
       - 'Packages/com.uynewnas.vrc-embodied-companion/Runtime/CompanionPlayerLookup.cs'
       - 'World/Assets/Editor/CompanionMinimalWorldBootstrap.cs'
+      - 'World/Assets/Scripts/CompanionPlayerLifecycleDebugProbe.cs'
       - '.github/workflows/player-lifecycle-contract.yml'
 
 jobs:
@@ -34,6 +36,7 @@ jobs:
           lifecycle = (runtime / 'CompanionPlayerLifecycle.cs').read_text(encoding='utf-8')
           lookup = (runtime / 'CompanionPlayerLookup.cs').read_text(encoding='utf-8')
           bootstrap = Path('World/Assets/Editor/CompanionMinimalWorldBootstrap.cs').read_text(encoding='utf-8')
+          debug_probe = Path('World/Assets/Scripts/CompanionPlayerLifecycleDebugProbe.cs').read_text(encoding='utf-8')
 
           lifecycle_required = [
               'StateSpawned',
@@ -148,8 +151,11 @@ jobs:
               'new GameObject("CompanionPlayerObjectTemplate")',
               'AddComponent<VRCPlayerObject>()',
               'playerObjectTemplate.AddUdonSharpComponent<CompanionPlayerLifecycle>()',
+              'playerObjectTemplate.AddUdonSharpComponent<CompanionPlayerLifecycleDebugProbe>()',
               'GetComponent<VRCPlayerObject>()',
               'playerObjectTemplate.GetComponent<CompanionPlayerLifecycle>()',
+              'playerObjectTemplate.GetComponent<CompanionPlayerLifecycleDebugProbe>()',
+              'debugProbe == null || !debugProbe.loggingEnabled',
               'new GameObject("CompanionRuntime")',
               'AddUdonSharpComponent<CompanionPlayerLookup>()',
               'GetComponent<CompanionPlayerLookup>()',
@@ -160,10 +166,38 @@ jobs:
           bootstrap_forbidden = [
               'AddComponent<CompanionPlayerLifecycle>()',
               'AddComponent<CompanionPlayerLookup>()',
+              'AddComponent<CompanionPlayerLifecycleDebugProbe>()',
               'new GameObject("Lifecycle")',
           ]
           for token in bootstrap_forbidden:
               assert token not in bootstrap, token
+
+          # The acceptance probe must remain observability-only. It records immediate callback ids
+          # and delayed post-event snapshots, but may not sync state, request serialization, repair
+          # ownership, or send network events that could perturb the lifecycle being measured.
+          debug_probe_required = [
+              'class CompanionPlayerLifecycleDebugProbe',
+              'GetComponent<CompanionPlayerLifecycle>()',
+              'public override void OnPlayerRestored(VRCPlayerApi player)',
+              'public override void OnPlayerLeft(VRCPlayerApi player)',
+              'SendCustomEventDelayedFrames(nameof(CaptureAfterStart), 1)',
+              'SendCustomEventDelayedFrames(nameof(CaptureAfterRestore), 1)',
+              'SendCustomEventDelayedFrames(nameof(CaptureAfterLeave), 1)',
+              '[VRC Companion Lifecycle Callback]',
+              '[VRC Companion Lifecycle Snapshot]',
+              'Networking.GetOwner(gameObject)',
+          ]
+          for token in debug_probe_required:
+              assert token in debug_probe, token
+
+          debug_probe_forbidden = [
+              '[UdonSynced]',
+              'RequestSerialization()',
+              'Networking.SetOwner',
+              'SendCustomNetworkEvent',
+          ]
+          for token in debug_probe_forbidden:
+              assert token not in debug_probe, token
 
           # Lookup/refresh must not silently re-enable a disabled companion or resurrect a detached one.
           assert 'if (preserveDisabled)' in lifecycle
