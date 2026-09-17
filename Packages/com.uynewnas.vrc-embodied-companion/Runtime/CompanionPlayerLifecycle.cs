@@ -40,6 +40,14 @@ namespace UyNewNas.VRCEmbodiedCompanion
         private void Start()
         {
             RefreshOwner("start");
+
+            // VRChat guarantees PlayerObject ownership is correct in Start. Reaching Start without
+            // a valid owner is therefore not a normal startup-order condition for a runtime copy;
+            // fail closed instead of leaving an ownerless lifecycle in StateSpawned indefinitely.
+            if (lifecycleState == StateSpawned && associatedPlayerId < 0)
+            {
+                MarkDetached("start_owner_unavailable");
+            }
         }
 
         public override void OnPlayerRestored(VRCPlayerApi player)
