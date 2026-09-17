@@ -45,6 +45,11 @@ internal static class CompanionMinimalWorldBootstrap
         playerObjectTemplate.AddComponent<VRCPlayerObject>();
         playerObjectTemplate.AddUdonSharpComponent<CompanionPlayerLifecycle>();
 
+        // Development-only runtime evidence for #4/#12. The probe logs each restore/leave callback
+        // and then emits a one-frame-delayed snapshot from the same PlayerObject root. It never owns
+        // lifecycle decisions or synchronized state, and can be removed from production worlds.
+        playerObjectTemplate.AddUdonSharpComponent<CompanionPlayerLifecycleDebugProbe>();
+
         GameObject runtimeServices = new GameObject("CompanionRuntime");
         runtimeServices.AddUdonSharpComponent<CompanionPlayerLookup>();
 
@@ -132,6 +137,12 @@ internal static class CompanionMinimalWorldBootstrap
             throw new InvalidOperationException("CompanionPlayerObjectTemplate is missing CompanionPlayerLifecycle on the PlayerObject root.");
         }
 
+        CompanionPlayerLifecycleDebugProbe debugProbe = playerObjectTemplate.GetComponent<CompanionPlayerLifecycleDebugProbe>();
+        if (debugProbe == null || !debugProbe.loggingEnabled)
+        {
+            throw new InvalidOperationException("CompanionPlayerObjectTemplate is missing the enabled lifecycle debug probe required by the acceptance world.");
+        }
+
         GameObject runtimeServices = GameObject.Find("CompanionRuntime");
         if (runtimeServices == null || runtimeServices.GetComponent<CompanionPlayerLookup>() == null)
         {
@@ -153,7 +164,7 @@ internal static class CompanionMinimalWorldBootstrap
             throw new InvalidOperationException(ScenePath + " is not enabled in EditorBuildSettings.");
         }
 
-        Debug.Log("Verified serialized minimal VRChat companion scene: descriptor, spawn, placeholder, PlayerObject lifecycle template, lookup service, and build-scene entry survived save/reopen. SDK validation and VRChat Build & Test are still required.");
+        Debug.Log("Verified serialized minimal VRChat companion scene: descriptor, spawn, placeholder, PlayerObject lifecycle template, enabled evidence probe, lookup service, and build-scene entry survived save/reopen. SDK validation and VRChat Build & Test are still required.");
     }
 
     private static GameObject CreateBlock(Transform parent, string name, Vector3 position, Vector3 scale)
